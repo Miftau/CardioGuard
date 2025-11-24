@@ -71,6 +71,16 @@ try:
 except Exception:
     OPENAI_AVAILABLE = False
 
+# RAG Imports
+try:
+    from rag.consult_agent import cardio_consult
+    from rag.embedder import get_embedding
+    from rag.retriever import KnowledgeRetriever
+    RAG_MODULES_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ RAG modules not available: {e}")
+    RAG_MODULES_AVAILABLE = False
+
 # App initialization
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -180,6 +190,35 @@ elif use_openai:
 else:
     print("⚠️ No AI provider configured (GROQ or OpenAI). Chat endpoint will return an error unless keys installed.")
 
+# Initialize RAG System
+retriever = None
+if RAG_MODULES_AVAILABLE and OPENAI_AVAILABLE:
+    try:
+        print("🔄 Initializing RAG system...")
+        kb_path = os.path.join("rag", "knowledge_base.txt")
+        if os.path.exists(kb_path):
+            with open(kb_path, "r", encoding="utf-8") as f:
+                kb_text = f.read()
+            
+            # Simple chunking by double newline
+            kb_chunks = [c.strip() for c in kb_text.split("\n\n") if c.strip()]
+            
+            if kb_chunks:
+                # Generate embeddings
+                print(f"   - Generating embeddings for {len(kb_chunks)} chunks...")
+                embeddings = [get_embedding(chunk) for chunk in kb_chunks]
+                
+                retriever = KnowledgeRetriever(embeddings, kb_chunks)
+                print("✅ RAG system initialized.")
+            else:
+                print("⚠️ Knowledge base is empty.")
+        else:
+            print(f"⚠️ Knowledge base file not found at {kb_path}")
+    except Exception as e:
+        print(f"⚠️ RAG initialization failed: {e}")
+        retriever = None
+else:
+    print("ℹ️ RAG system disabled (missing modules or OpenAI key).")
 # Input columns (forms)
 BASE_COLUMNS_CLINICAL = [
     "age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
@@ -817,7 +856,7 @@ def check_subscription_access(f):
             # Redirect to login or show restricted message for other features
             elif request.endpoint in ['chat', 'book_appointment']:
                 flash("Please log in to access this feature.", "warning")
-                return redirect(url_for('login'))
+                return redirect(url_for("login"))
             # Allow access to the decorated function
             return f(*args, **kwargs)
 
@@ -1251,13 +1290,23 @@ def consult():
         print("Warning: save chat failed:", e)
 
     # call AI provider
+    ai_reply = ""
     try:
-        if use_groq:
-            ai_reply = call_groq_chat(user_msg, system_prompt=system_prompt)
-        elif use_openai:
-            ai_reply = call_openai_chat(user_msg, system_prompt=system_prompt)
-        else:
-            return jsonify({"error": "No AI provider configured (set GROQ_API_KEY or OPENAI_API_KEY)."}), 500
+        # Try RAG first if available
+        if retriever:
+            try:
+                ai_reply = cardio_consult(user_msg, retriever=retriever)
+            except Exception as e:
+                print("RAG consult failed, falling back to direct chat:", e)
+                # Fallback will happen below if ai_reply is empty
+        
+        if not ai_reply:
+            if use_groq:
+                ai_reply = call_groq_chat(user_msg, system_prompt=system_prompt)
+            elif use_openai:
+                ai_reply = call_openai_chat(user_msg, system_prompt=system_prompt)
+            else:
+                return jsonify({"error": "No AI provider configured (set GROQ_API_KEY or OPENAI_API_KEY)."}), 500
     except Exception as e:
         print("AI call failed:", e)
         return jsonify({"error": "AI provider error", "details": str(e)}), 500
@@ -1270,9 +1319,188 @@ def consult():
 
     return jsonify({"reply": ai_reply, "saved": bool(supabase)}), 200
 
+# ============================================================
+# Routes - Notifications & Messaging
+# ============================================================
+
+@app.route("/api/notifications/count")
+def get_notification_count():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"count": 0, "notifications": []})
+    
+    try:
+        # Fetch unread notifications
+        res = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(5).execute()
+        notifications = res.data if res.data else []
+        return jsonify({"count": len(notifications), "notifications": notifications})
+    except Exception as e:
+        print(f"Error fetching notifications: {e}")
+        return jsonify({"count": 0, "notifications": []})
+
+@app.route("/api/messages/unread_count")
+def get_unread_message_count():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"count": 0})
+    
+    try:
+        # Fetch unread messages count
+        # Note: This assumes a 'messages' table exists with 'receiver_id' and 'is_read'
+        res = supabase.table("messages").select("id", count="exact").eq("receiver_id", user_id).eq("is_read", False).execute()
+        return jsonify({"count": res.count})
+    except Exception as e:
+        print(f"Error fetching message count: {e}")
+        return jsonify({"count": 0})
+
+@app.route("/messages")
+@app.route("/messages/<conversation_id>")
+@login_required
+def messages_page(conversation_id=None):
+    user_id = session.get("user_id")
+    
+    # 1. Fetch list of conversations (users interacted with)
+    # This is complex in Supabase without a dedicated 'conversations' table.
+    # We'll try to fetch distinct senders/receivers from messages.
+    # For simplicity, we might just list doctors if user is patient, or patients if user is doctor.
+    # Or we can query unique user IDs from messages where user is sender or receiver.
+    
+    conversations = []
+    active_conversation_user = None
+    messages = []
+    
+    try:
+        # Simplified approach: If user is patient, show doctors they have appointments with.
+        # If user is doctor, show patients.
+        # AND show anyone they have exchanged messages with.
+        
+        # Let's just fetch recent messages to find conversation partners
+        sent = supabase.table("messages").select("receiver_id").eq("sender_id", user_id).execute()
+        received = supabase.table("messages").select("sender_id").eq("receiver_id", user_id).execute()
+        
+        contact_ids = set()
+        if sent.data:
+            contact_ids.update([m['receiver_id'] for m in sent.data])
+        if received.data:
+            contact_ids.update([m['sender_id'] for m in received.data])
+            
+        # Also add booked appointments participants
+        if session.get("role") == "doctor":
+            # Find patients
+            # (Assuming 'appointments' table exists and links doctor_id (which is user_id here?) to user_id)
+            pass 
+        
+        # Fetch user details for these contacts
+        if contact_ids:
+            # Supabase 'in' query
+            users_res = supabase.table("users").select("id, name, email").in_("id", list(contact_ids)).execute()
+            for u in users_res.data:
+                conversations.append({
+                    "other_user_id": u['id'],
+                    "other_user_name": u['name'],
+                    "last_message_time": "", # To be filled
+                    "last_message_content": "Click to view chat"
+                })
+        
+        # If conversation_id is provided, load messages
+        if conversation_id:
+            # Get user details
+            u_res = supabase.table("users").select("name, email").eq("id", conversation_id).single().execute()
+            if u_res.data:
+                active_conversation_user = u_res.data
+            
+            # Fetch messages
+            # (sender = me AND receiver = them) OR (sender = them AND receiver = me)
+            # Supabase doesn't support OR easily in one query like that without raw SQL or stored procedures usually, 
+            # but let's try .or_ syntax if available or two queries.
+            
+            # Query 1: Sent by me
+            m1 = supabase.table("messages").select("*").eq("sender_id", user_id).eq("receiver_id", conversation_id).execute()
+            # Query 2: Sent by them
+            m2 = supabase.table("messages").select("*").eq("sender_id", conversation_id).eq("receiver_id", user_id).execute()
+            
+            all_msgs = (m1.data or []) + (m2.data or [])
+            # Sort by created_at
+            all_msgs.sort(key=lambda x: x['created_at'])
+            messages = all_msgs
+            
+            # Mark as read
+            if m2.data:
+                unread_ids = [m['id'] for m in m2.data if not m.get('is_read')]
+                if unread_ids:
+                    supabase.table("messages").update({"is_read": True}).in_("id", unread_ids).execute()
+
+    except Exception as e:
+        print(f"Error loading messages: {e}")
+        flash("Error loading messages.", "danger")
+
+    return render_template(
+        "messages.html",
+        conversations=conversations,
+        active_conversation_id=conversation_id,
+        active_conversation_user=active_conversation_user,
+        messages=messages
+    )
+
+@app.route("/messages/send", methods=["POST"])
+@login_required
+def send_message():
+    sender_id = session.get("user_id")
+    receiver_id = request.form.get("receiver_id")
+    content = request.form.get("content")
+    
+    if not receiver_id or not content:
+        flash("Message cannot be empty.", "warning")
+        return redirect(url_for("messages_page", conversation_id=receiver_id))
+    
+    try:
+        # Insert message
+        supabase.table("messages").insert({
+            "sender_id": sender_id,
+            "receiver_id": receiver_id,
+            "content": content
+        }).execute()
+        
+        # Send Email Notification
+        # Fetch receiver email
+        receiver_data = supabase.table("users").select("email, name").eq("id", receiver_id).single().execute()
+        if receiver_data.data:
+            receiver_email = receiver_data.data['email']
+            receiver_name = receiver_data.data['name']
+            
+            try:
+                msg = Message(
+                    subject="[CardioGuard] New Message",
+                    recipients=[receiver_email],
+                    body=f"""
+                    Hello {receiver_name},
+                    
+                    You have received a new message from {session.get('user_name', 'a user')} on CardioGuard.
+                    
+                    "{content}"
+                    
+                    Log in to reply: {url_for('login', _external=True)}
+                    """
+                )
+                mail.send(msg)
+            except Exception as e:
+                print(f"Failed to send email notification: {e}")
+
+        # Create in-app notification
+        supabase.table("notifications").insert({
+            "user_id": receiver_id,
+            "message": f"New message from {session.get('user_name')}",
+            "type": "message"
+        }).execute()
+        
+    except Exception as e:
+        print(f"Error sending message: {e}")
+        flash("Failed to send message.", "danger")
+        
+    return redirect(url_for("messages_page", conversation_id=receiver_id))
+
 @app.route("/chat", methods=["GET", "POST"])
-@limiter.limit("5 per minute")
-#@check_subscription_access # Apply access control
+@login_required
 def chat():
     if request.method == "GET":
         chat_log = session.get("chat_log", [])

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Messages{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">Conversations</div>
+            <div class="list-group list-group-flush" id="conversation-list">
+                <!-- Conversations will be loaded here -->
+                {% for conv in conversations %}
+                <a href="{{ url_for('messages_page', conversation_id=conv.other_user_id) }}"
+                    class="list-group-item list-group-item-action {% if active_conversation_id == conv.other_user_id %}active{% endif %}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ conv.other_user_name }}</h5>
+                        <small>{{ conv.last_message_time|datetime_from_iso|default(now(), true)|strftime('%H:%M')
+                            }}</small>
+                    </div>
+                    <p class="mb-1 text-truncate">{{ conv.last_message_content }}</p>
+                </a>
+                {% else %}
+                <div class="p-3 text-muted">No conversations yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header">
+                {% if active_conversation_user %}
+                Chat with {{ active_conversation_user.name }}
+                {% else %}
+                Select a conversation
+                {% endif %}
+            </div>
+            <div class="card-body" style="height: 400px; overflow-y: auto;" id="chat-box">
+                {% if active_conversation_id %}
+                {% for msg in messages %}
+                <div
+                    class="d-flex {% if msg.sender_id == session.get('user_id') %}justify-content-end{% else %}justify-content-start{% endif %} mb-2">
+                    <div class="card {% if msg.sender_id == session.get('user_id') %}bg-primary text-white{% else %}bg-light{% endif %}"
+                        style="max-width: 70%;">
+                        <div class="card-body p-2">
+                            <p class="mb-0">{{ msg.content }}</p>
+                            <small
+                                class="{% if msg.sender_id == session.get('user_id') %}text-white-50{% else %}text-muted{% endif %}"
+                                style="font-size: 0.7rem;">
+                                {{ msg.created_at|datetime_from_iso|default(now(), true)|strftime('%H:%M') }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-center text-muted mt-5">Select a user to start chatting.</p>
+                {% endif %}
+            </div>
+            {% if active_conversation_id %}
+            <div class="card-footer">
+                <form action="{{ url_for('send_message') }}" method="POST" class="d-flex">
+                    <input type="hidden" name="receiver_id" value="{{ active_conversation_id }}">
+                    <input type="text" name="content" class="form-control me-2" placeholder="Type a message..."
+                        required>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i></button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Scroll to bottom of chat
+    const chatBox = document.getElementById('chat-box');
+    if (chatBox) {
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+{% endblock %}
