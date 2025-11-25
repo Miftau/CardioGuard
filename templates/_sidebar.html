@@ -1,0 +1,78 @@
+<!-- templates/_sidebar.html -->
+<div class="sidebar d-flex flex-column p-3 bg-light border-end vh-100 position-fixed" style="width: 250px;">
+    <h5 class="mb-4">Settings</h5>
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('user_dashboard') }}">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('edit_profile') }}">
+                <i class="bi bi-person"></i> Edit Profile
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('pricing') }}">
+                <i class="bi bi-credit-card"></i> Subscription
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('my_bookings') }}">
+                <i class="bi bi-calendar-check"></i> My Bookings
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('messages_page') }}">
+                <i class="bi bi-envelope"></i> Messages
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('form') }}">
+                <i class="bi bi-file-medical"></i> Health Prediction
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('chat') }}">
+                <i class="bi bi-robot"></i> AI Consultation
+            </a>
+        </li>
+        <!-- Add more links as needed: Notification Settings, Privacy, etc. -->
+        <li class="nav-item mt-auto">
+            <a class="nav-link text-danger" href="#" onclick="confirmDelete()">
+                <i class="bi bi-trash"></i> Delete Account
+            </a>
+        </li>
+    </ul>
+</div>
+
+<script>
+ function confirmDelete() {
+     if (confirm("Are you sure you want to delete your account permanently? This action cannot be undone.")) {
+         // Submit a POST request to the delete endpoint
+         fetch('/user/account/delete', {
+             method: 'POST',
+             credentials: 'same-origin', // Include session cookies
+             headers: {
+                 'Content-Type': 'application/json',
+                 // Include CSRF token if you use one
+                 // 'X-CSRFToken': getCookie('csrftoken') // Example CSRF token
+             },
+         })
+         .then(response => {
+             if (response.ok) {
+                 // Redirect to index or login after successful deletion
+                 window.location.href = "{{ url_for('index') }}";
+             } else {
+                 alert("Failed to delete account. Please try again.");
+             }
+         })
+         .catch(error => {
+             console.error('Error:', error);
+             alert("An error occurred. Please try again.");
+         });
+     }
+ }
+ // Helper function to get CSRF token from cookie (if applicable)
+ // function getCookie(name) { ... }
+</script>

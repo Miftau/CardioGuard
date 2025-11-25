@@ -1,4 +1,3 @@
-# app.py
 """
 CardioGuard Flask app (full).
 Features:
@@ -11,6 +10,8 @@ Features:
  - Supabase Auth (email/password, OAuth)
  - Subscription management integrated into dashboards
  - Access control based on subscription plans
+ - User profile editing with privacy settings (JSONB)
+ - User account deletion
 Requirements (install in your venv):
 pip install flask pandas numpy scikit-learn joblib python-dotenv flask-mail requests supabase py-sdk-openai groq flask-cors
 Note: package names may vary slightly for groq or supabase clients; adjust to what you actually use:
@@ -18,11 +19,9 @@ Note: package names may vary slightly for groq or supabase clients; adjust to wh
  - groq: "groq" (if you plan to use Groq)
  - openai: "openai" (fallback)
 """
-
 # ============================================================
 # Imports & App Initialization
 # ============================================================
-
 import os
 import bcrypt
 import uuid
@@ -52,7 +51,6 @@ import numpy as np
 import shap
 import joblib
 from functools import wraps # For login_required decorator
-
 # Optional SDKs — imported inside try/except so app still runs without them
 try:
     from supabase import create_client as create_supabase_client
@@ -70,7 +68,6 @@ try:
     OPENAI_AVAILABLE = True
 except Exception:
     OPENAI_AVAILABLE = False
-
 # RAG Imports
 try:
     from rag.consult_agent import cardio_consult
@@ -80,7 +77,6 @@ try:
 except Exception as e:
     print(f"⚠️ RAG modules not available: {e}")
     RAG_MODULES_AVAILABLE = False
-
 # App initialization
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -88,7 +84,6 @@ CORS(app)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 limiter = Limiter(get_remote_address, app=app, default_limits=["10 per minute"])
-
 # Email config (optional)
 app.config.update(
     MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
@@ -102,15 +97,12 @@ app.config.update(
     ),
 )
 mail = Mail(app)
-
 @app.context_processor
 def inject_now():
     return {"current_year": datetime.now().year}
-
 # ============================================================
 # Custom Jinja2 Filters
 # ============================================================
-
 @app.template_filter('datetime_from_iso')
 def datetime_from_iso_filter(date_string):
     """Convert an ISO format date string (YYYY-MM-DDTHH:MM:SS.ssssss) to a datetime object."""
@@ -132,17 +124,13 @@ def datetime_from_iso_filter(date_string):
         except ValueError:
             print(f"Warning: Could not parse date string '{date_string}' with fallback method either.")
             return None
-
 @app.template_filter('now')
 def now_filter():
     """Return the current datetime object."""
     return datetime.now()
-
-
 # ============================================================
 # Configuration & Constants
 # ============================================================
-
 # Paths, model filenames & optional remote base
 RESULTS_DIR = os.path.join("static", "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -153,7 +141,6 @@ LIFESTYLE_MODEL_FILE = os.getenv("LIFESTYLE_MODEL_FILE", "heart_rf_lifestyle.pkl
 LIFESTYLE_SCALER_FILE = os.getenv("LIFESTYLE_SCALER_FILE", "heart_scaler_lifestyle.pkl")
 LIFESTYLE_TEMPLATE_FILE = os.getenv("LIFESTYLE_TEMPLATE_FILE", "heart_user_template_lifestyle.csv")
 REMOTE_MODEL_BASE = os.getenv("REMOTE_MODEL_BASE", "").rstrip("/")
-
 # Optional Supabase (chat history persistence, auth)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -170,17 +157,14 @@ else:
         print("⚠️ Supabase credentials provided but 'supabase' package not available.")
     else:
         print("ℹ️ Supabase not configured; chat history persistence disabled.")
-
 # AI provider configuration (Groq preferred, OpenAI fallback)
 GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
 PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY")
-
 use_groq = bool(GROQ_API_KEY and GROQ_AVAILABLE)
 use_openai = bool(OPENAI_API_KEY and OPENAI_AVAILABLE)
-
 if use_groq:
     groq_client = Groq(api_key=GROQ_API_KEY)
     print("✅ Groq configured for chat.")
@@ -189,7 +173,6 @@ elif use_openai:
     print("✅ OpenAI configured for chat fallback.")
 else:
     print("⚠️ No AI provider configured (GROQ or OpenAI). Chat endpoint will return an error unless keys installed.")
-
 # Initialize RAG System
 retriever = None
 if RAG_MODULES_AVAILABLE and OPENAI_AVAILABLE:
@@ -199,15 +182,13 @@ if RAG_MODULES_AVAILABLE and OPENAI_AVAILABLE:
         if os.path.exists(kb_path):
             with open(kb_path, "r", encoding="utf-8") as f:
                 kb_text = f.read()
-            
             # Simple chunking by double newline
-            kb_chunks = [c.strip() for c in kb_text.split("\n\n") if c.strip()]
-            
+            kb_chunks = [c.strip() for c in kb_text.split("
+") if c.strip()]
             if kb_chunks:
                 # Generate embeddings
                 print(f"   - Generating embeddings for {len(kb_chunks)} chunks...")
                 embeddings = [get_embedding(chunk) for chunk in kb_chunks]
-                
                 retriever = KnowledgeRetriever(embeddings, kb_chunks)
                 print("✅ RAG system initialized.")
             else:
@@ -228,11 +209,9 @@ BASE_COLUMNS_LIFESTYLE = [
     "age", "gender", "height", "weight", "ap_hi", "ap_lo",
     "cholesterol", "gluc", "smoke", "alco", "active"
 ]
-
 # ============================================================
 # Virtual Meeting System (Jitsi) Helpers
 # ============================================================
-
 def generate_jitsi_url(appointment_id, appointment_time_str):
     """
     Generates a unique Jitsi meeting URL based on appointment details.
@@ -248,11 +227,9 @@ def generate_jitsi_url(appointment_id, appointment_time_str):
     # Use a public Jitsi server or your own self-hosted one
     jitsi_server = os.getenv("JITSI_SERVER_URL", "https://meet.jit.si") # e.g., "https://your-jitsi-instance.com"
     return f"{jitsi_server}/{room_name}"
-
 # ============================================================
 # Notification System (Email) Helpers
 # ============================================================
-
 def send_appointment_reminder_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
     """
     Sends an email reminder for an appointment.
@@ -263,11 +240,8 @@ def send_appointment_reminder_email(appointment_id, user_email, user_name, docto
             recipients=[user_email],
             body=f"""
             Dear {user_name},
-
             This is a friendly reminder that you have an appointment scheduled with Dr. {doctor_name} on {appointment_time_str}.
-
             Please ensure you are ready for the session.
-
             Best regards,
             The CardioGuard Team
             """
@@ -300,11 +274,9 @@ def send_appointment_reminder_email(appointment_id, user_email, user_name, docto
         except Exception as log_e:
             print(f"❌ Failed to log notification failure: {log_e}")
         return False
-
 # ============================================================
 # Utility Functions
 # ============================================================
-
 def ensure_model_files(timeout=60):
     required = [
         CLINICAL_MODEL_FILE, CLINICAL_SCALER_FILE, CLINICAL_TEMPLATE_FILE,
@@ -315,7 +287,6 @@ def ensure_model_files(timeout=60):
         return
     if not REMOTE_MODEL_BASE:
         raise FileNotFoundError(f"Missing model/template files: {missing}. Set REMOTE_MODEL_BASE to auto-download them.")
-
     print("🛰️ Missing files detected:", missing)
     for fname in missing:
         url = f"{REMOTE_MODEL_BASE}/{fname}"
@@ -328,7 +299,6 @@ def ensure_model_files(timeout=60):
             print("✅", fname)
         except Exception as e:
             print("❌ failed to download", fname, e)
-
 # Load models & templates
 def load_models():
     print("🔄 Loading models & templates...")
@@ -336,27 +306,21 @@ def load_models():
     clinical_scaler = joblib.load(CLINICAL_SCALER_FILE)
     clinical_template_df = pd.read_csv(CLINICAL_TEMPLATE_FILE)
     CLINICAL_FEATURE_COLUMNS = clinical_template_df.columns.tolist()
-
     lifestyle_model = joblib.load(LIFESTYLE_MODEL_FILE)
     lifestyle_scaler = joblib.load(LIFESTYLE_SCALER_FILE)
     lifestyle_template_df = pd.read_csv(LIFESTYLE_TEMPLATE_FILE)
     LIFESTYLE_FEATURE_COLUMNS = lifestyle_template_df.columns.tolist()
-
     print("✅ Models loaded")
     return (clinical_model, clinical_scaler, CLINICAL_FEATURE_COLUMNS,
             lifestyle_model, lifestyle_scaler, LIFESTYLE_FEATURE_COLUMNS)
-
 (
     clinical_model, clinical_scaler, CLINICAL_FEATURE_COLUMNS,
     lifestyle_model, lifestyle_scaler, LIFESTYLE_FEATURE_COLUMNS
 ) = load_models()
-
-
 # Prediction helper (clinical & lifestyle) 
 def prepare_and_predict(df_raw: pd.DataFrame, model_type: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if model_type not in ("clinical", "lifestyle"):
         raise ValueError("Invalid model_type")
-
     df = df_raw.copy()
     # If headerless (pandas will provide integer column names), map positional columns
     if all(isinstance(c, int) for c in df.columns):
@@ -366,10 +330,8 @@ def prepare_and_predict(df_raw: pd.DataFrame, model_type: str) -> Tuple[pd.DataF
         else:
             df = df.iloc[:, :len(BASE_COLUMNS_LIFESTYLE)]
             df.columns = BASE_COLUMNS_LIFESTYLE[:df.shape[1]]
-
     # Store raw features *before* scaling for SHAP
     raw_features_df = df.copy()
-
     # Clinical pipeline: one-hot align with CLINICAL_FEATURE_COLUMNS then scale
     if model_type == "clinical":
         cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
@@ -393,7 +355,6 @@ def prepare_and_predict(df_raw: pd.DataFrame, model_type: str) -> Tuple[pd.DataF
              raw_features_df[col] = pd.to_numeric(raw_features_df[col], errors="coerce")
         raw_features_df = raw_features_df.fillna(raw_features_df.mean(numeric_only=True))
         raw_features_df = raw_features_df.reindex(columns=LIFESTYLE_FEATURE_COLUMNS, fill_value=0)
-
     # predict probabilities & classes
     if hasattr(model, "predict_proba"):
         probs = model.predict_proba(X)[:, 1]
@@ -404,19 +365,14 @@ def prepare_and_predict(df_raw: pd.DataFrame, model_type: str) -> Tuple[pd.DataF
             probs = 1.0 / (1.0 + np.exp(-df_dec))
         except Exception:
             probs = model.predict(X).astype(float)  # last resort
-
     preds = model.predict(X)
-
     # Build output
     out_df = df_raw.copy() # Use original raw input for display
     out_df["Prediction"] = preds
     out_df["Prob_Pos"] = np.round(probs, 4)
     out_df["Risk_Level"] = out_df["Prob_Pos"].apply(lambda p: "High" if p > 0.66 else ("Medium" if p > 0.33 else "Low"))
-
     # Return both results and raw features for SHAP
     return out_df, raw_features_df
-
-
 # NEW: Function to generate SHAP explanation
 def generate_shap_explanation(raw_features_df_row, model, feature_names):
     """
@@ -425,30 +381,24 @@ def generate_shap_explanation(raw_features_df_row, model, feature_names):
     """
     try:
         import numpy as np # Ensure numpy is available
-
         # Ensure the input is a single row DataFrame (shape (1, n_features))
         if raw_features_df_row.shape[0] != 1:
              print(f"Warning: Expected 1 row for SHAP, got {raw_features_df_row.shape[0]}. Taking first row.")
              raw_features_df_row = raw_features_df_row.iloc[[0]] # Make sure it's still a DataFrame
-
         # Get the underlying numpy array for the explainer
         # Use .values to get the raw numerical array
         input_array = raw_features_df_row.values
-
         # Create an explainer object for the specific model type
         # TreeExplainer is efficient for tree-based models like Random Forest
         explainer = shap.TreeExplainer(model)
-
         # Calculate SHAP values for the specific input array
         # Pass the numpy array directly
         shap_values_raw = explainer.shap_values(input_array)
-
         # --- Handle potential list structure for multi-output models (like RandomForestClassifier for binary classification) ---
         # shap_values_raw might be a list of arrays for each class [class_0_values, class_1_values] for binary classification
         # or a single array if the model outputs probability for positive class directly or is single-output.
         # We typically want the SHAP values corresponding to the positive class (or the output used for probability).
         # For RandomForestClassifier.predict_proba(X)[:, 1], we usually want the SHAP values for class 1.
-
         if isinstance(shap_values_raw, list):
             # It's a list, likely [shap_values_class_0, shap_values_class_1] for binary classification
             if len(shap_values_raw) == 2:
@@ -464,7 +414,6 @@ def generate_shap_explanation(raw_features_df_row, model, feature_names):
         else:
             # It's a single array (e.g., from a regressor or a classifier configured differently)
             shap_values_for_output = shap_values_raw
-
         # Ensure shap_values_for_output is a 1D array corresponding to features of the single input row
         # It should have shape (n_features,) after indexing the correct class if needed
         if shap_values_for_output.ndim > 1:
@@ -473,37 +422,28 @@ def generate_shap_explanation(raw_features_df_row, model, feature_names):
             if shap_values_for_output.ndim != 1:
                  print(f"Warning: SHAP output shape {shap_values_for_output.shape} is unexpected after squeeze. Attempting to flatten.")
                  shap_values_for_output = shap_values_for_output.flatten() # Fallback to flatten if still wrong shape
-
         # At this point, shap_values_for_output should be a 1D numpy array of length n_features
         # Convert to a list for JSON serialization
         shap_values_list = shap_values_for_output.tolist()
         feature_names_list = feature_names # This should be the list of feature names corresponding to the columns used for the model
-
         if len(shap_values_list) != len(feature_names_list):
              print(f"Warning: SHAP values length ({len(shap_values_list)}) does not match feature names length ({len(feature_names_list)}).")
              # This might happen if the feature alignment failed somewhere. Proceed carefully or return empty.
              # For now, let's assume they align correctly based on the model's training feature order.
              # If lengths differ significantly, the explanation might be misleading.
-
         # Create a list of dictionaries for easier handling in the template
         shap_explanation = [
             {"feature": feat, "shap_value": val}
             for feat, val in zip(feature_names_list, shap_values_list)
         ]
-
         # Sort by absolute SHAP value to show most impactful features first
         shap_explanation.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
-
         return shap_explanation
-
     except Exception as e:
         print(f"Error generating SHAP explanation: {e}")
         import traceback
         traceback.print_exc() # Print full traceback for debugging
         return [] # Return an empty list if explanation fails
-
-
-
 # Heuristic diagnostic rules (your rules, expanded)
 def get_likely_condition(
     age, cholesterol, resting_bp, max_heart_rate,
@@ -515,27 +455,23 @@ def get_likely_condition(
     """Return (likely_condition, suggestions) based on simple heuristic rules."""
     likely_condition = "Generalized Cardiac Risk"
     suggestions: List[str] = []
-
     # normalize
     def to_float(v, default=0.0):
         try:
             return float(v)
         except Exception:
             return default
-
     age_v = to_float(age, 0)
     chol_v = to_float(cholesterol, 0)
     bp_v = to_float(resting_bp, 0)
     mhr_v = to_float(max_heart_rate, 0)
     old_v = to_float(oldpeak, 0)
     fbs_v = to_float(fasting_blood_sugar, 0)
-
     # normalize some categorical inputs to lowercase strings for matching
     smoking_s = str(smoking).strip().lower() if smoking is not None else ""
     alcohol_s = str(alcohol).strip().lower() if alcohol is not None else ""
     physical_activity_s = str(physical_activity).strip().lower() if physical_activity is not None else ""
     st_slope_s = str(st_slope).strip().lower() if st_slope is not None else ""
-
     # Rule set (ordered — earlier matches stronger)
     if (
         (chol_v > 240 and bp_v > 140)
@@ -613,9 +549,7 @@ def get_likely_condition(
             "Discuss results with your primary care clinician.",
             "Consider targeted tests (lipid panel, ECG, echo) if concerned."
         ]
-
     return likely_condition, suggestions
-
 # Chat helpers (Groq / OpenAI) + Supabase persistence
 def save_chat_message(user_id: str, role: str, message: str):
     if supabase:
@@ -628,7 +562,6 @@ def save_chat_message(user_id: str, role: str, message: str):
         except Exception as e:
             # don't fail the whole request because of DB issues
             print("⚠️ Supabase insert failed:", e)
-
 def call_groq_chat(user_message: str, system_prompt: Optional[str] = None) -> str:
     # Minimal Groq chat usage - adjust to your groq SDK version
     if not GROQ_API_KEY or not GROQ_AVAILABLE:
@@ -638,7 +571,6 @@ def call_groq_chat(user_message: str, system_prompt: Optional[str] = None) -> st
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_message})
-
         response = groq_client.chat.completions.create(
             model=os.getenv("GROQ_MODEL", "llama3-13b"),  # choose desired model
             messages=messages,
@@ -651,7 +583,6 @@ def call_groq_chat(user_message: str, system_prompt: Optional[str] = None) -> st
     except Exception as e:
         print("Groq chat error:", e)
         raise
-
 def call_openai_chat(user_message: str, system_prompt: Optional[str] = None) -> str:
     if not OPENAI_API_KEY or not OPENAI_AVAILABLE:
         raise RuntimeError("OpenAI not available/configured")
@@ -660,7 +591,6 @@ def call_openai_chat(user_message: str, system_prompt: Optional[str] = None) -> 
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_message})
-
         resp = openai.ChatCompletion.create(
             model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             messages=messages,
@@ -671,7 +601,6 @@ def call_openai_chat(user_message: str, system_prompt: Optional[str] = None) -> 
     except Exception as e:
         print("OpenAI chat error:", e)
         raise
-
 # Authentication & Authorization Helpers
 def login_required(f):
     @wraps(f)
@@ -681,8 +610,6 @@ def login_required(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated_function
-
-
 def get_user_role(user_id):
     """Helper to fetch user role from Supabase.
     Checks the 'users', 'doctors', and 'admins' tables based on the Supabase Auth ID.
@@ -697,7 +624,6 @@ def get_user_role(user_id):
         # If not found in 'users', proceed to check other tables
         if "PGRST116" not in str(e) or "0 rows" not in str(e):
             print(f"Error checking 'users' table for {user_id}: {e}")
-
     try:
         # Check 'doctors' table
         doctor_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
@@ -708,7 +634,6 @@ def get_user_role(user_id):
         # If not found in 'doctors', proceed to check 'admins'
         if "PGRST116" not in str(e) or "0 rows" not in str(e):
             print(f"Error checking 'doctors' table for {user_id}: {e}")
-
     try:
         # Check 'admins' table
         # The 'admins' table likely has 'user_id' column matching the Supabase Auth ID
@@ -720,12 +645,9 @@ def get_user_role(user_id):
         # If not found in 'admins' either, log error (if it's not the expected '0 rows')
         if "PGRST116" not in str(e) or "0 rows" not in str(e):
             print(f"Error checking 'admins' table for {user_id}: {e}")
-
     # If not found in any table, default to 'user' or handle as needed
     print(f"User {user_id} not found in any role table ('users', 'doctors', 'admins'). Assigning default role 'user'.")
     return "user"
-
-
 def get_user_subscription_status(user_id):
     """
     Helper to fetch user's current subscription status from Supabase.
@@ -737,7 +659,6 @@ def get_user_subscription_status(user_id):
         if role == "admin":
             # Admins should have full access even without a subscription
             return "active", False
-
         # Step 2: For normal users, fetch actual subscription
         subs_data = (
             supabase.table("user_subscriptions")
@@ -747,7 +668,6 @@ def get_user_subscription_status(user_id):
             .order("start_date", desc=True)
             .execute()
         )
-        
         if subs_data.data:
             latest_sub = subs_data.data[0]
             plan_info = latest_sub.get("subscription_plans", {})
@@ -756,14 +676,10 @@ def get_user_subscription_status(user_id):
         else:
             # No active subscriptions found, default to free
             return "inactive", True
-
     except Exception as e:
         print(f"Error fetching subscription for user {user_id}: {e}")
         # Default to safest option (free/restricted)
         return "inactive", True
-
-
-
 def handle_supabase_auth_session(session_data):
     """
     Process the session data returned from Supabase auth and set Flask session.
@@ -773,12 +689,10 @@ def handle_supabase_auth_session(session_data):
     user_id = user_info["sub"]
     email = user_info.get("email")
     user_name = user_info.get("user_metadata", {}).get("name") or email
-
     # Determine role by checking tables in a specific order
     # You might want to adjust the logic here depending on how you assign roles initially
     # e.g., via admin panel, registration form, or by checking the existence in specific tables.
     role = "user" # Default role
-
     # Check 'doctors' table first (or the order you prefer)
     try:
         doctor_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
@@ -788,7 +702,6 @@ def handle_supabase_auth_session(session_data):
         # If not found in doctors, continue checking
         if "PGRST116" not in str(e) or "0 rows" not in str(e):
             print(f"Error checking 'doctors' table for {user_id}: {e}")
-
     # Check 'admins' table if role is still default
     if role == "user": # Only check admins if not already determined to be a doctor
         try:
@@ -799,7 +712,6 @@ def handle_supabase_auth_session(session_data):
             # If not found in admins, continue checking users or keep default
             if "PGRST116" not in str(e) or "0 rows" not in str(e):
                 print(f"Error checking 'admins' table for {user_id}: {e}")
-
     # Check 'users' table if role is still default
     # This also ensures the user profile exists in the 'users' table if needed for other data
     if role == "user":
@@ -824,7 +736,6 @@ def handle_supabase_auth_session(session_data):
             # User exists in 'users' table, potentially update name/email if changed in auth
             # Or just use the data fetched
             pass
-
     # Set Flask session variables
     session.clear()
     session["user_id"] = user_id
@@ -832,7 +743,6 @@ def handle_supabase_auth_session(session_data):
     session["user_name"] = user_name
     # Optionally, store email if needed elsewhere
     session["user_email"] = email
-
 # Access Control Decorators
 def check_subscription_access(f):
     """
@@ -859,7 +769,6 @@ def check_subscription_access(f):
                 return redirect(url_for("login"))
             # Allow access to the decorated function
             return f(*args, **kwargs)
-
         # User is logged in, fetch subscription status
         try:
             sub_status, is_free_plan = get_user_subscription_status(user_id)
@@ -867,7 +776,6 @@ def check_subscription_access(f):
             # If there's an error fetching subscription, default to restricted
             flash("Error checking subscription status. Please try again later.", "danger")
             return redirect(url_for('user_dashboard'))
-
         if not is_free_plan and sub_status == "active":
             # Paid subscriber, allow access
             return f(*args, **kwargs)
@@ -891,16 +799,12 @@ def check_subscription_access(f):
             return redirect(url_for('user_dashboard'))
         # Allow access to the decorated function (e.g., for /form if limit not reached)
         return f(*args, **kwargs)
-
     return decorated_function
-
 # ensure files on startup
 ensure_model_files()
-
 # ============================================================
 # Routes - Authentication
 # ============================================================
-
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -908,11 +812,9 @@ def register():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         role = request.form.get("role", "user").strip().lower()  # expected: 'user', 'doctor' (or admin via admin UI)
-
         if not name or not email or not password:
             flash("Please fill in all required fields.", "danger")
             return redirect(url_for("register"))
-
         # Check if user exists
         try:
             existing = supabase.table("users").select("id, email").eq("email", email).execute()
@@ -923,10 +825,8 @@ def register():
             print("Supabase check error:", e)
             flash("Registration currently unavailable. Try again later.", "danger")
             return redirect(url_for("register"))
-
         # Hash password with bcrypt
         hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
         # Create user in users table (role included)
         try:
             res = supabase.table("users").insert({
@@ -941,7 +841,6 @@ def register():
             print("Supabase insert user error:", e)
             flash("Failed to create account. Try again later.", "danger")
             return redirect(url_for("register"))
-
         # If doctor, create doctor profile row
         try:
             if role == "doctor":
@@ -955,23 +854,18 @@ def register():
                     }).execute()
         except Exception as e:
             print("Warning: failed to create doctor profile:", e)
-
         flash("Account created successfully. Please log in.", "success")
         return redirect(url_for("login"))
-
     # GET
     return render_template("register.html")
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-
         if not email or not password:
             flash("Please provide both email and password.", "warning")
             return redirect(url_for("login"))
-
         # ---- STEP 1: Check Users Table ----
         try:
             user_resp = supabase.table("users").select("*").eq("email", email).limit(1).execute()
@@ -979,31 +873,25 @@ def login():
             print("Supabase user query error:", e)
             flash("Login temporarily unavailable. Please try again later.", "danger")
             return redirect(url_for("login"))
-
         if user_resp and user_resp.data:
             user = user_resp.data[0]
             stored_hash = user.get("password_hash")
-
             if stored_hash:
                 try:
                     if bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8")):
                         session.clear()
                         session["user_id"] = user.get("id")
                         session["user_name"] = user.get("name")
-
                         # --- STEP 1A: Detect Role ---
                         # Default role is 'user', unless doctor or admin
                         role = user.get("role", "user")
-
                         # If not admin, check if this user is a doctor
                         if role != "admin":
                             doctor_check = supabase.table("doctors").select("id").eq("id", user["id"]).execute()
                             if doctor_check.data:
                                 role = "doctor"
                                 session["doctor_id"] = doctor_check.data[0]["id"]
-
                         session["role"] = role
-
                         # --- STEP 1B: Redirect Based on Role ---
                         if role == "admin":
                             flash("Welcome back, Admin!", "success")
@@ -1014,19 +902,16 @@ def login():
                         else:
                             flash("Welcome back!", "success")
                             return redirect(url_for("user_dashboard"))
-
                 except ValueError as e:
                     print("Password hash error:", e)
                     flash("Error verifying credentials. Contact support.", "danger")
                     return redirect(url_for("login"))
-
         # ---- STEP 2: Check Admins Table (Fallback) ----
         try:
             admin_resp = supabase.table("admins").select("*").eq("email", email).limit(1).execute()
             if admin_resp and admin_resp.data:
                 admin = admin_resp.data[0]
                 stored_hash = admin.get("password_hash")
-
                 if stored_hash and bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8")):
                     session.clear()
                     session["user_id"] = admin.get("id")
@@ -1036,16 +921,11 @@ def login():
                     return redirect(url_for("admin_dashboard"))
         except Exception as e:
             print("Supabase admin lookup error:", e)
-
         flash("Invalid email or password.", "danger")
         return redirect(url_for("login"))
-
     return render_template("login.html")
-
-
     # GET
     return render_template("login.html")
-
 @app.route("/logout")
 def logout():
     supabase.auth.sign_out() # Sign out from Supabase
@@ -1055,7 +935,6 @@ def logout():
     session.pop("user_email", None) # Clear email
     flash("Logged out successfully.")
     return redirect(url_for("login"))
-
 # --- Social Login Routes ---
 @app.route("/auth/<provider>")
 def social_login(provider):
@@ -1067,14 +946,12 @@ def social_login(provider):
     # Supabase OAuth URL
     auth_url = f"{SUPABASE_URL}/auth/v1/authorize?provider={provider}&redirect_to={redirect_url}"
     return redirect(auth_url)
-
 @app.route("/auth/callback/<provider>")
 def auth_callback(provider):
     code = request.args.get("code")
     if not code:
         flash("Authentication failed", "danger")
         return redirect(url_for("login"))
-
     # Exchange code for session
     res = requests.post(
         f"{SUPABASE_URL}/auth/v1/token?grant_type=authorization_code",
@@ -1085,9 +962,7 @@ def auth_callback(provider):
     if "access_token" not in data:
         flash("Login failed", "danger")
         return redirect(url_for("login"))
-
     handle_supabase_auth_session(data) # Process session and set Flask session
-
     flash("Signed in successfully!", "success")
     role = session["role"]
     if role == "admin":
@@ -1096,23 +971,18 @@ def auth_callback(provider):
         return redirect(url_for("doctor_dashboard"))
     else:
         return redirect(url_for("user_dashboard"))
-
 # ============================================================
 # Routes - Main UI Pages
 # ============================================================
-
 @app.route("/")
 def index():
     return render_template("index.html")
-
 @app.route("/about")
 def about():
     return render_template("about.html")
-
 @app.route("/resources")
 def resources():
     return render_template("resources.html")
-
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "POST":
@@ -1120,16 +990,16 @@ def contact():
         email = request.form.get("email")
         subject = request.form.get("subject")
         message = request.form.get("message")
-
         if not all([name, email, message]):
             flash("Please fill all fields.", "danger")
             return redirect(url_for("contact"))
-
         try:
             msg = Message(
                 subject=f"[CardioGuard] {subject or 'New Message'} from {name}",
                 recipients=[os.getenv("MAIL_DEFAULT_RECEIVER")],
-                body=f"Name: {name}\nEmail: {email}\n{message}"
+                body=f"Name: {name}
+Email: {email}
+{message}"
             )
             mail.send(msg)
             flash("✅ Message sent successfully!", "success")
@@ -1138,7 +1008,6 @@ def contact():
             flash("❌ Failed to send message.", "danger")
         return redirect(url_for("contact"))
     return render_template("contact.html")
-
 @app.route("/form")
 def form():
     # Check access for non-logged-in users only
@@ -1154,11 +1023,9 @@ def form():
         BASE_COLUMNS_CLINICAL=BASE_COLUMNS_CLINICAL,
         BASE_COLUMNS_LIFESTYLE=BASE_COLUMNS_LIFESTYLE
     )
-
 # ============================================================
 # Routes - Prediction & AI
 # ============================================================
-
 @app.route("/predict", methods=["POST"])
 #@check_subscription_access # Apply access control
 def predict():
@@ -1166,7 +1033,6 @@ def predict():
         raw_type = (request.form.get("model_type") or "clinical").lower()
         model_map = {"heart": "clinical", "clinical": "clinical", "cardio": "lifestyle", "lifestyle": "lifestyle"}
         model_type = model_map.get(raw_type, "clinical")
-
         uploaded_file = request.files.get("file")
         if uploaded_file and uploaded_file.filename:
             df = pd.read_csv(uploaded_file)
@@ -1183,10 +1049,8 @@ def predict():
                     if c == "cholesterol":
                         val = request.form.get("chol")
                 user_data[c] = val
-
             df = pd.DataFrame([user_data])
             results, raw_features_df = prepare_and_predict(df, model_type) # Receive raw features
-
         # --- POST-SUCCESS LOGIC FOR ACCESS CONTROL ---
         user_id = session.get("user_id")
         if user_id:
@@ -1206,9 +1070,7 @@ def predict():
         else:
             # Non-logged-in user: update session time
             session['last_form_time'] = datetime.now().isoformat()
-
         # --- END POST-SUCCESS LOGIC ---
-
         # Generate SHAP Explanation - NEW
         shap_explanation = []
         if not raw_features_df.empty: # Only calculate if raw features exist
@@ -1217,23 +1079,19 @@ def predict():
             shap_explanation = generate_shap_explanation(raw_features_df.iloc[[0]], # Use iloc[[0]] to keep it as a DataFrame with one row
                                                         clinical_model if model_type == "clinical" else lifestyle_model,
                                                         feature_names)
-
         # Save results CSV
         fname = f"{model_type}_pred_{uuid.uuid4().hex[:8]}.csv"
         save_path = os.path.join(RESULTS_DIR, fname)
         results.to_csv(save_path, index=False)
         download_link = url_for("static", filename=f"results/{fname}")
-
         single = results.iloc[0]
         prob = float(single["Prob_Pos"])
         risk = single["Risk_Level"]
-
         readable = (
             "Heart Disease Detected" if model_type == "clinical" and single["Prediction"] == 1
             else "Elevated Cardiovascular Risk" if model_type == "lifestyle" and single["Prediction"] == 1
             else "No Heart Disease Detected"
         )
-
         # heuristic inference (use available fields; fallback to 0)
         likely_condition, suggestions = get_likely_condition(
             age=single.get("age"),
@@ -1248,7 +1106,6 @@ def predict():
             oldpeak=single.get("oldpeak"),
             st_slope=single.get("slope")
         )
-
         return render_template(
             "result.html",
             result=readable,
@@ -1265,7 +1122,6 @@ def predict():
         print("Prediction error:", e)
         flash(f"Error processing prediction: {str(e)}", "danger")
         return redirect(url_for("form"))
-
 # AI chat endpoint (JSON API)
 @app.route("/consult", methods=["POST"])
 def consult():
@@ -1278,17 +1134,14 @@ def consult():
     data = request.get_json(silent=True)
     if not data or "message" not in data:
         return jsonify({"error": "missing 'message' in JSON body"}), 400
-
     user_msg = data["message"]
     user_id = data.get("user_id", f"anon-{uuid.uuid4().hex[:8]}")
     system_prompt = os.getenv("CHAT_SYSTEM_PROMPT", "You are CardioConsult, a medically informed assistant. Provide safe, conservative guidance and always advise seeing a clinician for definitive diagnosis.")
-
     # store user message (best-effort)
     try:
         save_chat_message(user_id, "user", user_msg)
     except Exception as e:
         print("Warning: save chat failed:", e)
-
     # call AI provider
     ai_reply = ""
     try:
@@ -1299,7 +1152,6 @@ def consult():
             except Exception as e:
                 print("RAG consult failed, falling back to direct chat:", e)
                 # Fallback will happen below if ai_reply is empty
-        
         if not ai_reply:
             if use_groq:
                 ai_reply = call_groq_chat(user_msg, system_prompt=system_prompt)
@@ -1310,25 +1162,20 @@ def consult():
     except Exception as e:
         print("AI call failed:", e)
         return jsonify({"error": "AI provider error", "details": str(e)}), 500
-
     # persist assistant reply
     try:
         save_chat_message(user_id, "assistant", ai_reply)
     except Exception as e:
         print("Warning: save chat failed:", e)
-
     return jsonify({"reply": ai_reply, "saved": bool(supabase)}), 200
-
 # ============================================================
 # Routes - Notifications & Messaging
 # ============================================================
-
 @app.route("/api/notifications/count")
 def get_notification_count():
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"count": 0, "notifications": []})
-    
     try:
         # Fetch unread notifications
         res = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(5).execute()
@@ -1337,13 +1184,11 @@ def get_notification_count():
     except Exception as e:
         print(f"Error fetching notifications: {e}")
         return jsonify({"count": 0, "notifications": []})
-
 @app.route("/api/messages/unread_count")
 def get_unread_message_count():
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"count": 0})
-    
     try:
         # Fetch unread messages count
         # Note: This assumes a 'messages' table exists with 'receiver_id' and 'is_read'
@@ -1352,44 +1197,36 @@ def get_unread_message_count():
     except Exception as e:
         print(f"Error fetching message count: {e}")
         return jsonify({"count": 0})
-
 @app.route("/messages")
 @app.route("/messages/<conversation_id>")
 @login_required
 def messages_page(conversation_id=None):
     user_id = session.get("user_id")
-    
     # 1. Fetch list of conversations (users interacted with)
     # This is complex in Supabase without a dedicated 'conversations' table.
     # We'll try to fetch distinct senders/receivers from messages.
     # For simplicity, we might just list doctors if user is patient, or patients if user is doctor.
     # Or we can query unique user IDs from messages where user is sender or receiver.
-    
     conversations = []
     active_conversation_user = None
     messages = []
-    
     try:
         # Simplified approach: If user is patient, show doctors they have appointments with.
         # If user is doctor, show patients.
         # AND show anyone they have exchanged messages with.
-        
         # Let's just fetch recent messages to find conversation partners
         sent = supabase.table("messages").select("receiver_id").eq("sender_id", user_id).execute()
         received = supabase.table("messages").select("sender_id").eq("receiver_id", user_id).execute()
-        
         contact_ids = set()
         if sent.data:
             contact_ids.update([m['receiver_id'] for m in sent.data])
         if received.data:
             contact_ids.update([m['sender_id'] for m in received.data])
-            
         # Also add booked appointments participants
         if session.get("role") == "doctor":
             # Find patients
             # (Assuming 'appointments' table exists and links doctor_id (which is user_id here?) to user_id)
             pass 
-        
         # Fetch user details for these contacts
         if contact_ids:
             # Supabase 'in' query
@@ -1401,39 +1238,32 @@ def messages_page(conversation_id=None):
                     "last_message_time": "", # To be filled
                     "last_message_content": "Click to view chat"
                 })
-        
         # If conversation_id is provided, load messages
         if conversation_id:
             # Get user details
             u_res = supabase.table("users").select("name, email").eq("id", conversation_id).single().execute()
             if u_res.data:
                 active_conversation_user = u_res.data
-            
             # Fetch messages
             # (sender = me AND receiver = them) OR (sender = them AND receiver = me)
             # Supabase doesn't support OR easily in one query like that without raw SQL or stored procedures usually, 
             # but let's try .or_ syntax if available or two queries.
-            
             # Query 1: Sent by me
             m1 = supabase.table("messages").select("*").eq("sender_id", user_id).eq("receiver_id", conversation_id).execute()
             # Query 2: Sent by them
             m2 = supabase.table("messages").select("*").eq("sender_id", conversation_id).eq("receiver_id", user_id).execute()
-            
             all_msgs = (m1.data or []) + (m2.data or [])
             # Sort by created_at
             all_msgs.sort(key=lambda x: x['created_at'])
             messages = all_msgs
-            
             # Mark as read
             if m2.data:
                 unread_ids = [m['id'] for m in m2.data if not m.get('is_read')]
                 if unread_ids:
                     supabase.table("messages").update({"is_read": True}).in_("id", unread_ids).execute()
-
     except Exception as e:
         print(f"Error loading messages: {e}")
         flash("Error loading messages.", "danger")
-
     return render_template(
         "messages.html",
         conversations=conversations,
@@ -1441,18 +1271,15 @@ def messages_page(conversation_id=None):
         active_conversation_user=active_conversation_user,
         messages=messages
     )
-
 @app.route("/messages/send", methods=["POST"])
 @login_required
 def send_message():
     sender_id = session.get("user_id")
     receiver_id = request.form.get("receiver_id")
     content = request.form.get("content")
-    
     if not receiver_id or not content:
         flash("Message cannot be empty.", "warning")
         return redirect(url_for("messages_page", conversation_id=receiver_id))
-    
     try:
         # Insert message
         supabase.table("messages").insert({
@@ -1460,45 +1287,36 @@ def send_message():
             "receiver_id": receiver_id,
             "content": content
         }).execute()
-        
         # Send Email Notification
         # Fetch receiver email
         receiver_data = supabase.table("users").select("email, name").eq("id", receiver_id).single().execute()
         if receiver_data.data:
             receiver_email = receiver_data.data['email']
             receiver_name = receiver_data.data['name']
-            
             try:
                 msg = Message(
                     subject="[CardioGuard] New Message",
                     recipients=[receiver_email],
                     body=f"""
                     Hello {receiver_name},
-                    
                     You have received a new message from {session.get('user_name', 'a user')} on CardioGuard.
-                    
                     "{content}"
-                    
                     Log in to reply: {url_for('login', _external=True)}
                     """
                 )
                 mail.send(msg)
             except Exception as e:
                 print(f"Failed to send email notification: {e}")
-
         # Create in-app notification
         supabase.table("notifications").insert({
             "user_id": receiver_id,
             "message": f"New message from {session.get('user_name')}",
             "type": "message"
         }).execute()
-        
     except Exception as e:
         print(f"Error sending message: {e}")
         flash("Failed to send message.", "danger")
-        
     return redirect(url_for("messages_page", conversation_id=receiver_id))
-
 @app.route("/chat", methods=["GET", "POST"])
 @login_required
 def chat():
@@ -1510,7 +1328,6 @@ def chat():
         user_message = data.get("message", "")
         chat_log = session.get("chat_log", [])
         chat_log.append({"role": "user", "message": user_message})
-
         try:
             response = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -1529,10 +1346,8 @@ def chat():
         except Exception as e:
             print("Groq connection error:", e)
             reply = "⚠️ Sorry, I'm having trouble connecting to my heart consultation engine."
-
         chat_log.append({"role": "assistant", "message": formatted_reply})
         session["chat_log"] = chat_log[-10:]
-
         try:
             supabase.table("chat_logs").insert({
                 "user_id": session.get("user_id", "guest"),
@@ -1541,16 +1356,13 @@ def chat():
             }).execute()
         except Exception as e:
             print("Logging error:", e)
-
         return jsonify({"reply": formatted_reply})
-
 @app.route("/api/chat", methods=["POST"])
 @limiter.limit("5 per minute")  # tighter limit for chat API
 def ai_chat():
     user_input = request.json.get("message", "").strip()
     if not user_input:
         return jsonify({"error": "Message cannot be empty."}), 400
-
     # Check if user is logged in and has access (for API calls, check session or token)
     user_id = request.json.get("id") # Assuming API sends user_id
     if user_id:
@@ -1564,11 +1376,9 @@ def ai_chat():
     else:
         # For anonymous API calls, deny access
         return jsonify({"error": "AI chat requires authentication and a paid subscription."}), 403
-
     # Retrieve session chat (if applicable for API, maybe use DB or token-based session)
     # For simplicity here, we'll proceed without session for the API endpoint
     # In a real app, you'd manage state differently for APIs.
-
     # Prepare Groq request
     try:
         response = requests.post(
@@ -1589,15 +1399,14 @@ def ai_chat():
         )
         data = response.json()
         ai_reply = data["choices"][0]["message"]["content"]
-
         # Basic logging (could log to DB instead)
-        print(f"[CHAT LOG] User: {user_input}\nAI: {ai_reply}\n---")
-
+        print(f"[CHAT LOG] User: {user_input}
+AI: {ai_reply}
+---")
         return jsonify({"reply": ai_reply})
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "CardioConsult AI is currently unavailable. Please try again later."}), 500
-
 # -----------------------------
 # Utility: Clear chat
 # -----------------------------
@@ -1606,7 +1415,6 @@ def clear_chat():
     session.pop("chat_history", None)
     flash("Chat history cleared.")
     return redirect(url_for("chat"))
-
 @app.route("/chat-history/<user_id>", methods=["GET"])
 def chat_history(user_id):
     if not supabase:
@@ -1617,26 +1425,21 @@ def chat_history(user_id):
     except Exception as e:
         print("Supabase fetch failed:", e)
         return jsonify({"error": "Failed to fetch history", "details": str(e)}), 500
-
 # ============================================================
 # Routes - Doctor Features
 # ============================================================
-
 @app.route("/doctor/availability", methods=["GET", "POST"])
 def doctor_availability():
     if session.get("role") != "doctor":
         flash("Doctor access only.", "warning")
         return redirect(url_for("login"))
-
     user_id = session.get("user_id")
     # find doctor record
     doctor_data = supabase.table("doctors").select("id").eq("user_id", user_id).single().execute()
     if not doctor_data.data:
         flash("Doctor profile not found.", "danger")
         return redirect(url_for("doctor_dashboard"))
-
     doctor_id = doctor_data.data["id"]
-
     if request.method == "POST":
         date_str = request.form.get("available_date")
         start_time = request.form.get("start_time")
@@ -1654,11 +1457,9 @@ def doctor_availability():
             print("Error adding availability:", e)
             flash("Failed to add availability.", "danger")
         return redirect(url_for("doctor_availability"))
-
     # GET request
     slots = supabase.table("doctor_availability").select("*").eq("doctor_id", doctor_id).order("available_date").execute().data
     return render_template("doctor_availability.html", slots=slots)
-
 @app.route("/book", methods=["GET", "POST"])
 @login_required
 @check_subscription_access # Apply access control
@@ -1666,7 +1467,6 @@ def book_appointment():
     if session.get("role") != "user":
         flash("Login as a user to book an appointment.", "warning")
         return redirect(url_for("login"))
-
     if request.method == "POST":
         slot_id = request.form.get("slot_id")
         # Fetch slot
@@ -1674,21 +1474,17 @@ def book_appointment():
         if not slot_data:
             flash("Invalid slot selected.", "danger")
             return redirect(url_for("book_appointment"))
-
         slot = slot_data.data
         if slot.get("is_booked"):
             flash("This slot has already been booked.", "danger")
             return redirect(url_for("book_appointment"))
-
         # Create appointment
         doctor_id = slot["doctor_id"]
         user_id = session.get("user_id")
         dt_str = f"{slot['available_date']} {slot['start_time']}"
         appointment_time = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-
         # --- NEW: Generate Jitsi URL ---
         jitsi_url = generate_jitsi_url(slot_id, dt_str) # Use slot_id and time_str for uniqueness
-
         supabase.table("appointments").insert({
             "user_id": user_id,
             "doctor_id": doctor_id,
@@ -1696,33 +1492,25 @@ def book_appointment():
             "status": "pending",
             "meeting_url": jitsi_url # Add the generated URL
         }).execute()
-
         # Mark slot as booked
         supabase.table("doctor_availability").update({"is_booked": True}).eq("id", slot_id).execute()
-
         # --- NEW: Send Appointment Reminder Email ---
         # Fetch doctor details for the email
         doctor_details = supabase.table("doctors").select("id, specialization").eq("id", doctor_id).single().execute().data
         user_details = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
-
         doctor_name = doctor_details.get("specialization", "Unknown") # Or fetch from user table if needed
         user_name = user_details.get("name")
         user_email = user_details.get("email")
         appointment_time_str = appointment_time.strftime("%Y-%m-%d at %H:%M")
-
         send_appointment_reminder_email(slot_id, user_email, user_name, doctor_name, appointment_time_str)
-
         flash("Appointment booked successfully!", "success")
         return redirect(url_for("user_dashboard"))
-
     # GET: get all available slots
     available_slots = supabase.table("doctor_availability").select(
         "id, doctor_id, available_date, start_time, end_time"
     ).eq("is_booked", False).execute().data
-
     doctors_data = supabase.table("doctors").select("id, specialization, bio").execute().data
     doctor_lookup = {d["id"]: d for d in doctors_data}
-
     # Build a frontend-friendly JSON object for JavaScript
     formatted_slots = []
     formatted_slots.extend(
@@ -1738,9 +1526,7 @@ def book_appointment():
         }
         for s in available_slots
     )
-
     return render_template("book_appointment.html", slots=formatted_slots)
-
 @app.route("/my-bookings")
 @login_required
 def my_bookings():
@@ -1749,7 +1535,6 @@ def my_bookings():
     appointments = supabase.table("appointments").select(
         "id, appointment_time, status, doctor_id, meeting_url" # Include meeting_url
     ).eq("user_id", user_id).order("appointment_time", desc=True).execute().data
-
     doctor_lookup = {}
     try:
         if doctor_ids := list({a["doctor_id"] for a in appointments}):
@@ -1757,12 +1542,10 @@ def my_bookings():
             doctor_lookup = {d["id"]: d for d in doctors}
     except Exception as e:
         print("Doctor fetch error:", e)
-
     return render_template("my_bookings.html", appointments=appointments, doctors=doctor_lookup)
 # ============================================================
 # Routes - Subscription Management
 # ============================================================
-
 @app.route("/pricing")
 def pricing():
     """Display available subscription plans."""
@@ -1777,21 +1560,18 @@ def pricing():
         flash("Error loading plans. Please try again later.", "danger")
         plans = [] # Fallback to empty list if fetch fails
     return render_template("pricing.html", plans=plans) 
-
 @app.route("/subscribe/<plan_name>", methods=["GET", "POST"])
 @login_required
 def subscribe(plan_name):
     if session.get("role") != "user":
         flash("Only users can subscribe.", "danger")
         return redirect(url_for("user_dashboard"))
-
     # Fetch selected plan
     plan_response = supabase.table("subscription_plans").select("*").eq("name", plan_name).execute()
     plan = plan_response.data[0] if plan_response.data else None
     if not plan:
         flash("Plan not found.", "danger")
         return redirect(url_for("user_dashboard"))
-
     user_id = session["user_id"]
     if request.method == "POST":
         # Create Paystack transaction
@@ -1818,7 +1598,6 @@ def subscribe(plan_name):
         else:
             flash("Failed to initialize payment.", "danger")
     return render_template("subscribe_confirm.html", plan=plan, PAYSTACK_PUBLIC_KEY=PAYSTACK_PUBLIC_KEY)
-
 @app.route("/verify_payment")
 @login_required
 def verify_payment():
@@ -1826,7 +1605,6 @@ def verify_payment():
     if not reference:
         flash("Missing payment reference.", "danger")
         return redirect(url_for("user_dashboard"))
-
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
     response = requests.get(f"https://api.paystack.co/transaction/verify/{reference}", headers=headers)
     res_data = response.json()
@@ -1845,7 +1623,6 @@ def verify_payment():
     else:
         flash("Payment verification failed.", "danger")
     return redirect(url_for("user_dashboard"))
-
 @app.route("/user/subscriptions/cancel/<sub_id>", methods=["POST"])
 @login_required
 def cancel_subscription(sub_id):
@@ -1857,11 +1634,9 @@ def cancel_subscription(sub_id):
     supabase.table("user_subscriptions").update({"status": "cancelled"}).eq("id", sub_id).eq("user_id", user_id).execute()
     flash("Subscription cancelled.", "info")
     return redirect(url_for("user_dashboard"))
-
 # ============================================================
 # Routes - Dashboards
 # ============================================================
-
 @app.route("/doctor/dashboard")
 @login_required
 def doctor_dashboard():
@@ -1869,7 +1644,6 @@ def doctor_dashboard():
     if session.get("role") != "doctor":
         flash("Access denied. Doctors only.", "danger")
         return redirect(url_for("login"))
-
     user_id = session.get("user_id")
     doctor_id = session.get("doctor_id") # Assuming this is set during login for doctors
     # If doctor_id isn't in session, fetch it from the doctors table
@@ -1886,21 +1660,17 @@ def doctor_dashboard():
             print(f"Error fetching doctor ID: {e}")
             flash("Error accessing dashboard. Please try again later.", "danger")
             return redirect(url_for("login"))
-
     try:
         # Fetch doctor profile details (name, email, bio, specialization from users and doctors tables)
         user_data = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
         doctor_details = supabase.table("doctors").select("bio, specialization, consultation_fee").eq("id", doctor_id).single().execute().data
         # Combine user and doctor data
         profile_info = {**user_data, **doctor_details}
-
         # Fetch availability slots for this doctor
         availability_slots = supabase.table("doctor_availability").select("*").eq("doctor_id", doctor_id).order("available_date").execute().data
-
         # Fetch booked appointments for this doctor
         # --- NEW: Include meeting_url in query ---
         booked_appointments = supabase.table("appointments").select("id, user_id, appointment_time, status, meeting_url").eq("doctor_id", doctor_id).order("appointment_time").execute().data # Include meeting_url
-
         # Optionally, fetch user details for the booked appointments
         user_ids_needed = [appt["user_id"] for appt in booked_appointments]
         patient_details = {}
@@ -1911,7 +1681,6 @@ def doctor_dashboard():
         print(f"Error fetching doctor dashboard data: {e}")
         flash("Error loading dashboard data. Please try again later.", "danger")
         return redirect(url_for("login")) # Or render a partial template
-
     return render_template(
         "doctor_dashboard.html",
         profile=profile_info,
@@ -1919,29 +1688,24 @@ def doctor_dashboard():
         booked_appointments=booked_appointments,
         patient_details=patient_details
     )
-
 @app.route("/user/dashboard")
 @login_required
 def user_dashboard():
     if session.get("role") != "user":
         flash("Access denied. Users only.", "danger")
         return redirect(url_for("login"))
-
     user_id = session.get("user_id")
     try:
-        user_data = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
+        user_data = supabase.table("users").select("name, email, address, profile_picture_url, profile_settings").eq("id", user_id).single().execute().data
         # Store email in session for payment verification
         session["user_email"] = user_data["email"]
-
         # Fetch user's health records if applicable
         records = supabase.table("records").select("*").eq("user_id", user_id).order("created_at", desc=True).execute().data
-
         # Fetch user's booked appointments
         # --- NEW: Include meeting_url in query ---
         appointments = supabase.table("appointments").select(
             "id, doctor_id, appointment_time, status, meeting_url" # Include meeting_url
         ).eq("user_id", user_id).order("appointment_time", desc=True).execute().data
-
         # Fetch doctor details for the appointments
         doctor_ids_needed = [appt["doctor_id"] for appt in appointments]
         doctor_details = {}
@@ -1956,19 +1720,16 @@ def user_dashboard():
                 doc_info = doctors_lookup.get(doc_id, {})
                 user_info = users_lookup.get(doc_id, {})
                 doctor_details[doc_id] = {**doc_info, **user_info} # e.g., {'specialization': 'Cardiology', 'name': 'Dr. Smith'}
-
         # Prepare data for charts (example remains the same)
         if records:
             labels = [r["created_at"][:10] for r in records]
             scores = [r["health_score"] for r in records]
         else:
             labels, scores = [], []
-
         # --- NEW: Fetch user subscriptions ---
         user_subscriptions = supabase.table("user_subscriptions").select(
             "*, subscription_plans(name, price, duration_days, is_free)"
         ).eq("user_id", user_id).execute().data
-
         # Determine current plan status for UI hints
         current_plan_is_free = True
         if user_subscriptions:
@@ -1979,12 +1740,10 @@ def user_dashboard():
                 latest_sub = sorted(active_subs, key=lambda x: x.get("start_date", ""), reverse=True)[0]
                 plan_info = latest_sub.get("subscription_plans", {})
                 current_plan_is_free = plan_info.get("is_free", True)
-
     except Exception as e:
         print(f"Error fetching user dashboard  {e}")
         flash("Error loading dashboard data. Please try again later.", "danger")
         return redirect(url_for("login")) # Or render a partial template
-
     return render_template(
         "user_dashboard.html",
         user=user_data,
@@ -1996,15 +1755,12 @@ def user_dashboard():
         user_subscriptions=user_subscriptions, # Pass subscriptions to the template
         current_plan_is_free=current_plan_is_free # Pass plan status for UI
     )
-    
-    
 @app.route("/admin/dashboard")
 @login_required
 def admin_dashboard():
     if session.get("role") != "admin":
         flash("Access denied. Admins only.", "danger")
         return redirect(url_for("login"))
-
     try:
         # Fetch core counts
         total_users = len(supabase.table("users").select("id").execute().data)
@@ -2013,31 +1769,26 @@ def admin_dashboard():
         total_records = len(supabase.table("records").select("id").execute().data)
         total_chats = len(supabase.table("chat_logs").select("id").execute().data)
         total_appointments = len(supabase.table("appointments").select("id").execute().data)
-
         # Fetch counts for different appointment statuses
         appointment_statuses = supabase.table("appointments").select("status").execute().data
         status_counts = {}
         for appt in appointment_statuses:
             status = appt.get("status", "Unknown")
             status_counts[status] = status_counts.get(status, 0) + 1
-
         # Fetch admin details
         admins = supabase.table("admins").select("name, email").execute().data
-
         # Aggregate data for chart (records by consultation type)
         record_data = supabase.table("records").select("consultation_type").execute().data
         type_count = {}
         for r in record_data:
             ctype = r.get("consultation_type", "Unknown")
             type_count[ctype] = type_count.get(ctype, 0) + 1
-
         # Aggregate data for user role chart (if roles are stored in users table)
         user_roles = supabase.table("users").select("role").execute().data
         role_counts = {}
         for user in user_roles:
             role = user.get("role", "user") # Default to 'user' if role is missing
             role_counts[role] = role_counts.get(role, 0) + 1
-
         # --- Activity Chart Data ---
         # Example: Fetch user registrations over time (last 6 months)
         # Get the date 6 months ago
@@ -2052,26 +1803,22 @@ def admin_dashboard():
         # Sort the dates for the chart
         sorted_dates = sorted(registration_counts.keys())
         registration_counts_list = [registration_counts[date] for date in sorted_dates]
-
         # Example: Fetch appointment counts over time (last 6 months)
         appointment_counts_raw = supabase.table("appointments").select("appointment_time").gte("appointment_time", six_months_ago_str).execute().data
         appointment_dates = [appt["appointment_time"][:10] for appt in appointment_counts_raw]
         appointment_counts = Counter(appointment_dates)
         sorted_appt_dates = sorted(appointment_counts.keys())
         appointment_counts_list = [appointment_counts[date] for date in sorted_appt_dates]
-
         # Prepare labels for the chart (using the sorted unique dates)
         activity_labels = sorted(set(sorted_dates + sorted_appt_dates)) # Combine and sort unique dates
         # Prepare data for user registrations, aligning with activity_labels
         user_activity_data = [registration_counts.get(date, 0) for date in activity_labels]
         # Prepare data for appointments, aligning with activity_labels
         appt_activity_data = [appointment_counts.get(date, 0) for date in activity_labels]
-
         # --- Fetch all user subscriptions for admin ---
         user_subscriptions = supabase.table("user_subscriptions").select(
             "id, user_id, status, start_date, end_date, subscription_plans(name, price)"
         ).execute().data
-
         if user_ids_for_subs := list(
             {sub["user_id"] for sub in user_subscriptions}
         ):
@@ -2079,12 +1826,10 @@ def admin_dashboard():
             user_lookup_for_subs = {u["id"]: u for u in users_for_subs}
         else:
             user_lookup_for_subs = {}
-
     except Exception as e:
         print(f"Error fetching admin dashboard data: {e}")
         flash("Error loading dashboard data. Please try again later.", "danger")
         return redirect(url_for("admin_dashboard")) # Or render a partial template
-
     return render_template(
         "admin_dashboard.html",
         total_users=total_users,
@@ -2108,7 +1853,6 @@ def admin_dashboard():
         user_subscriptions=user_subscriptions,
         user_lookup_for_subs=user_lookup_for_subs
     )
-
 def log_activity(user_id, plan_id, activity_type):
     supabase.table("user_subscription_activity").insert({
         "user_id": user_id,
@@ -2117,13 +1861,121 @@ def log_activity(user_id, plan_id, activity_type):
     }).execute()
 
 # ============================================================
-# Routes - Utility
+# Routes - User Profile & Account Management
 # ============================================================
 
+@app.route('/user/profile/edit', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    user_id = session.get("user_id")
+    if not user_id or session.get("role") != "user": # Ensure it's a regular user
+        flash("Access denied.", "danger")
+        return redirect(url_for("login")) # Or appropriate dashboard
+
+    if request.method == 'POST':
+        # --- Handle Profile Updates ---
+        new_address = request.form.get('address', '').strip()
+        new_picture_url = request.form.get('profile_picture_url', '').strip()
+        # Validate inputs if necessary (e.g., URL format for picture)
+        # Consider adding validation for address length, picture URL format, etc.
+
+        # --- Handle Privacy Settings ---
+        # Fetch current settings from Supabase
+        current_data_res = supabase.table("users").select("profile_settings").eq("id", user_id).single().execute()
+        current_settings = current_data_res.data.get("profile_settings", {})
+        # Get new privacy settings from form
+        new_address_public = request.form.get('address_public') == 'on' # Checkbox is 'on' if checked
+        new_picture_public = request.form.get('picture_public') == 'on'
+
+        # Update the settings dictionary
+        updated_settings = {**current_settings, "address_public": new_address_public, "picture_public": new_picture_public}
+
+        try:
+            # Update the user's profile data and settings
+            supabase.table("users").update({
+                "address": new_address,
+                "profile_picture_url": new_picture_url,
+                "profile_settings": updated_settings # Store the updated JSONB object
+            }).eq("id", user_id).execute()
+            flash("Profile updated successfully!", "success")
+        except Exception as e:
+            print(f"Error updating profile: {e}") # Log error
+            flash("Failed to update profile. Please try again.", "danger")
+
+    # --- GET Request (or after POST redirect) ---
+    try:
+        user_data_res = supabase.table("users").select("*").eq("id", user_id).single().execute()
+        user_data = user_data_res.data
+        # Extract settings from the JSONB field
+        profile_settings = user_data.get("profile_settings", {})
+        address_public = profile_settings.get("address_public", False) # Default to False
+        picture_public = profile_settings.get("picture_public", False) # Default to False
+
+        # Pass data to the template
+        return render_template('edit_profile.html',
+                               user=user_data,
+                               address_public=address_public,
+                               picture_public=picture_public)
+    except Exception as e:
+        print(f"Error fetching profile for edit: {e}")
+        flash("Error loading profile data.", "danger")
+        return redirect(url_for("user_dashboard")) # Or another safe redirect
+
+
+@app.route('/user/account/delete', methods=['POST'])
+@login_required
+def delete_account():
+    user_id = session.get("user_id")
+    if not user_id or session.get("role") != "user":
+         flash("Access denied.", "danger")
+         return redirect(url_for("user_dashboard"))
+
+    # IMPORTANT: Handle related data first!
+    # This is a critical step. You must delete or anonymize all data associated with this user.
+    # Example: Delete user's records, appointments, messages, chat history, etc.
+    # You need to adapt these queries based on your actual table structure and relationships.
+    # Be very careful with foreign key constraints.
+
+    # Example deletions (uncomment and adapt as needed):
+    try:
+        # Delete user's health records
+        supabase.table("records").delete().eq("user_id", user_id).execute()
+        # Delete user's appointments (both as user and any created as doctor if applicable)
+        supabase.table("appointments").delete().eq("user_id", user_id).execute()
+        # Delete messages sent/received by this user
+        supabase.table("messages").delete().eq("sender_id", user_id).execute()
+        supabase.table("messages").delete().eq("receiver_id", user_id).execute()
+        # Delete chat history
+        supabase.table("chat_history").delete().eq("user_id", user_id).execute()
+        # Delete chat logs
+        supabase.table("chat_logs").delete().eq("user_id", user_id).execute()
+        # Delete notifications for this user
+        supabase.table("notifications").delete().eq("user_id", user_id).execute()
+        # Delete user's subscription records
+        supabase.table("user_subscriptions").delete().eq("user_id", user_id).execute()
+        # Delete user's availability slots (if any, assuming user could be a doctor too - adjust logic)
+        # supabase.table("doctor_availability").delete().eq("doctor_id", user_id).execute() # Only if user is doctor
+        # Delete user's doctor profile (if applicable)
+        # supabase.table("doctors").delete().eq("user_id", user_id).execute() # Only if user is doctor
+
+        # Finally, delete the main user entry
+        supabase.table("users").delete().eq("id", user_id).execute()
+
+        # Clear session
+        session.clear()
+        flash("Your account has been permanently deleted.", "info")
+        return redirect(url_for("index")) # Or a goodbye page
+    except Exception as e:
+        print(f"Error deleting account or related data: {e}")
+        flash("Failed to delete account due to an error. Please contact support.", "danger")
+        return redirect(url_for("edit_profile")) # Or back to settings - maybe don't clear session here on error
+
+# ============================================================
+# Routes - Utility
+# ============================================================
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "time": time.time()}), 200
-
 # ============================================================
 # Run
 # ============================================================
