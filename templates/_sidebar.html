@@ -1,5 +1,29 @@
 <!-- templates/_sidebar.html -->
 <div class="sidebar d-flex flex-column p-3 bg-light border-end vh-100 position-fixed" style="width: 250px;">
+    <!-- Notifications & Messages Icons 
+    <div class="d-flex justify-content-between mb-4">
+        <!-- Notifications -->
+        <div class="relative flex-grow-1 me-2" id="notification-bell">
+            <a href="#" class="text-gray-700 hover:text-red-500 text-xl d-block text-center" onclick="toggleDropdown('notif-dropdown'); return false;">
+                <i class="fas fa-bell"></i>
+                <span id="notification-count-badge" class="absolute -top-1 -end-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+            </a>
+            <div id="notif-dropdown" class="absolute end-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
+                <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
+                    Loading...
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="relative flex-grow-1 ms-2" id="message-envelope">
+            <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl d-block text-center">
+                <i class="fas fa-envelope"></i>
+                <span id="message-count-badge" class="absolute -top-1 -end-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+            </a>
+        </div>
+    </div>
+
     <h5 class="mb-4">Settings</h5>
     <ul class="nav flex-column">
         <li class="nav-item">
@@ -23,7 +47,7 @@
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('messages_page') }}">
+            <a class="nav-link" href="{{ url_for('messages_page') }}"> <!-- Link also exists above -->
                 <i class="bi bi-envelope"></i> Messages
             </a>
         </li>

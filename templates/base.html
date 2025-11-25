@@ -225,10 +225,55 @@
         .dark .nav-active {
             @apply text-red-400;
         }
+
+        /* --- SIDEBAR LAYOUT STYLES --- */
+        /* Desktop: Adjust main content to make space for sidebar */
+        @media (min-width: 768px) { /* Use md: or lg: breakpoint as needed, e.g., 768px or 1024px */
+            body.has-sidebar {
+                padding-left: 250px; /* Match the width of the sidebar */
+            }
+            .main-content-area {
+                margin-left: 250px; /* Match the width of the sidebar */
+                width: calc(100% - 250px); /* Optional: explicitly set width */
+            }
+        }
+
+        /* Mobile: Ensure sidebar doesn't interfere initially */
+        @media (max-width: 767px) { /* Use md: or lg: breakpoint as needed */
+            .sidebar {
+                position: relative !important; /* Override position-fixed on mobile */
+                width: 100% !important;        /* Full width on mobile */
+                height: auto !important;       /* Auto height */
+                z-index: 1000;                /* Ensure it's above main content if needed */
+            }
+            /* Adjust main content margin on mobile if sidebar is present */
+            .main-content-area {
+                margin-left: 0;
+                width: 100%;
+            }
+            /* Consider making it a collapsible drawer if desired */
+            /* .sidebar.hidden { display: none; } */
+            /* .sidebar.shown { display: block; } */
+        }
+
+        /* Style for the sidebar itself */
+        .sidebar {
+            /* These are typically applied for desktop view */
+            /* position: fixed;  <-- This is set in the _sidebar.html template */
+            /* width: 250px;    <-- This is set in the _sidebar.html template */
+            /* top: 0;         <-- This is set in the _sidebar.html template */
+            /* left: 0;        <-- This is set in the _sidebar.html template */
+            /* height: 100vh;  <-- This is set in the _sidebar.html template */
+            /* z-index: 1000; <-- This is set in the _sidebar.html template */
+            /* background-color: ...; <-- This is set in the _sidebar.html template */
+            /* border-right: ...; <-- This is set in the _sidebar.html template */
+            /* padding: ...; <-- This is set in the _sidebar.html template */
+            /* overflow-y: auto; <-- This is set in the _sidebar.html template */
+        }
     </style>
 </head>
 
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300 {% if request.endpoint in ['user_dashboard', 'doctor_dashboard'] %}has-sidebar{% endif %}"> <!-- Add 'has-sidebar' class conditionally -->
     <!-- ==================== NAVBAR ==================== -->
     <!-- Ensure the navbar container is relative to the document flow -->
     <nav class="bg-white shadow-lg py-4 sticky top-0 z-50 transition-all duration-300 sticky-nav">
@@ -247,31 +292,29 @@
                 <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
             </button>
 
-            <!-- Icons: Notifications & Messages (desktop) -->
-            <div class="hidden sm:flex items-center space-x-4 ml-4">
-                {% if session.get('user_id') %}
-                <!-- Notifications -->
-                <div class="relative" id="notification-bell">
-                    <a href="#" class="text-gray-700 hover:text-red-500 text-xl" onclick="toggleDropdown('notif-dropdown'); return false;">
-                        <i class="fas fa-bell"></i>
-                        <span id="notification-count-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
-                    </a>
-                    <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
-                        <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
-                            Loading...
-                        </div>
-                    </div>
-                </div>
+            <!-- Icons: Notifications & Messages (desktop) - REMOVED FROM HERE -->
+            <!-- <div class="hidden sm:flex items-center space-x-4 ml-4"> -->
+            <!--     {% if session.get('user_id') %} -->
+            <!--     <div class="relative" id="notification-bell"> -->
+            <!--         <a href="#" class="text-gray-700 hover:text-red-500 text-xl" onclick="toggleDropdown('notif-dropdown'); return false;"> -->
+            <!--             <i class="fas fa-bell"></i> -->
+            <!--             <span id="notification-count-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span> -->
+            <!--         </a> -->
+            <!--         <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50"> -->
+            <!--             <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list"> -->
+            <!--                 Loading... -->
+            <!--             </div> -->
+            <!--         </div> -->
+            <!--     </div> -->
 
-                <!-- Messages -->
-                <div class="relative" id="message-envelope">
-                    <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl">
-                        <i class="fas fa-envelope"></i>
-                        <span id="message-count-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
-                    </a>
-                </div>
-                {% endif %}
-            </div>
+            <!--     <div class="relative" id="message-envelope"> -->
+            <!--         <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl"> -->
+            <!--             <i class="fas fa-envelope"></i> -->
+            <!--             <span id="message-count-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span> -->
+            <!--         </a> -->
+            <!--     </div> -->
+            <!--     {% endif %} -->
+            <!-- </div> -->
 
             <!-- Mobile hamburger -->
             <button id="mobile-menu-toggle" class="sm:hidden text-gray-700 focus:outline-none z-50"
@@ -327,13 +370,21 @@
         </div>
     </nav>
 
-    <!-- ==================== MAIN CONTENT ==================== -->
-    <!-- Ensure main content starts below the fixed/sticky navbar -->
-    <main class="flex-1 container mx-auto p-4 sm:p-6">
-        <div data-aos="fade-up">
-            {% block content %}{% endblock %}
-        </div>
-    </main>
+    <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
+    <!-- Use a flex container to manage sidebar and main content -->
+    <div class="flex flex-1 flex-col md:flex-row"> <!-- Use flex on smaller screens, row on md+ -->
+        <!-- Sidebar will be included conditionally in dashboard templates -->
+        <!-- The sidebar template (_sidebar.html) should have the class 'sidebar' -->
+        {% block sidebar %}{% endblock %}
+
+        <!-- ==================== MAIN CONTENT AREA ==================== -->
+        <!-- Apply the responsive margin/padding classes here -->
+        <main class="main-content-area flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
+            <div data-aos="fade-up">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
 
     <!-- Footer -->
     <footer class="bg-gray-900 text-gray-300 mt-auto">
