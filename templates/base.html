@@ -230,7 +230,7 @@
 
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
     <!-- ==================== SIDEBAR (for logged-in users only) ==================== -->
-    {% block sidebar %}{% endblock %}
+    
 
     <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
     <!-- Add left margin/padding based on whether sidebar is present -->
@@ -288,25 +288,39 @@
                         </a>
                     </li>
 
-                    <!-- Login / Logout -->
-                    {% if session.get('user_id') %}
-                    <li>
-                        <a href="/logout"
-                            class="block bg-gray-800 text-white px-4 py-2 rounded-full hover:bg-gray-900 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
-                            Logout
-                        </a>
-                    </li>
-                    {% else %}
-                    <li>
-                        <a href="/login"
-                            class="block bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
-                            Login
-                        </a>
-                    </li>
-                    {% endif %}
+                      <!-- Login / Logout / Profile Icon -->
+                {% if session.get('user_id') %}
+                <!-- Profile Icon Dropdown (for logged-in users) -->
+                <div class="relative" id="profile-dropdown">
+                    <a href="#" class="text-gray-700 hover:text-red-500 text-xl d-block text-center relative" onclick="toggleDropdown('profile-menu'); return false;">
+                        <i class="fas fa-user-circle"></i> <!-- Or fa-user, fa-user-alt, etc. -->
+                        <!-- Optional: Add a small badge or indicator if needed -->
+                    </a>
+                    <div id="profile-menu" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
+                        <div class="py-1">
+                            <!-- Dashboard Link based on role -->
+                            {% if session.get('role') == 'admin' %}
+                                <a href="{{ url_for('admin_dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Admin Dashboard</a>
+                            {% elif session.get('role') == 'doctor' %}
+                                <a href="{{ url_for('doctor_dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Doctor Dashboard</a>
+                            {% else %} <!-- Default to user dashboard -->
+                                <a href="{{ url_for('user_dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">User Dashboard</a>
+                            {% endif %}
+                            <a href="{{ url_for('edit_profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Edit Profile</a>
+                            <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-500 dark:hover:bg-gray-700">Logout</a>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <a href="/login"
+                    class="block bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
+                    Login
+                </a>
+                {% endif %}
                 </ul>
             </div>
         </nav>
+        {% block sidebar %}{% endblock %}
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
         <main class="flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->

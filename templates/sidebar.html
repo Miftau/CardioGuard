@@ -1,93 +1,129 @@
-<!-- templates/_sidebar.html -->
-<div id="sidebar-container"
-     class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg lg:translate-x-0 lg:static lg:z-auto lg:shadow-none"
-     aria-labelledby="sidebar-label"
-     role="navigation">
-  <div class="h-full flex flex-col">
-    <!-- Top Icons Section -->
-    <div class="flex justify-between p-4 border-b border-gray-200">
-      <!-- Notifications -->
-      <div class="relative" id="notification-bell">
-        <a href="#" class="text-gray-700 hover:text-red-500 text-xl block text-center relative" onclick="toggleDropdown('notif-dropdown'); return false;">
-          <i class="fas fa-bell"></i>
-          <span id="notification-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
-        </a>
-        <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
-          <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
-            Loading...
+<div x-data="{ sidebarOpen: false, sidebarHover: false }"
+     @click.outside="sidebarOpen = false"
+     class="relative">
+
+  <!-- Toggle Button (Mobile + Collapsed Desktop) -->
+  <button @click="sidebarOpen = !sidebarOpen"
+          class="fixed left-4 top-4 z-50 lg:hidden p-2 rounded-md bg-white shadow-lg border border-gray-200">
+    <i class="fas fa-bars text-xl text-gray-700"></i>
+  </button>
+
+  <!-- Sidebar -->
+  <aside
+    @mouseenter="sidebarHover = true"
+    @mouseleave="sidebarHover = false"
+    :class="{
+      'translate-x-0': sidebarOpen || sidebarHover,
+      '-translate-x-full lg:translate-x-0': !(sidebarOpen || sidebarHover)
+    }"
+    class="fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-xl transition-transform duration-300 ease-in-out
+           lg:shadow-lg lg:translate-x-0 lg:static lg:z-auto
+           flex flex-col">
+
+    <!-- Sidebar Content -->
+    <div class="h-full flex flex-col">
+
+      <!-- Top Icons -->
+      <div class="flex justify-between items-center p-4 border-b border-gray-200">
+        <div class="relative" x-data="{ open: false }">
+          <button @click="open = !open" class="text-gray-700 hover:text-red-500 text-xl">
+            <i class="fas fa-bell"></i>
+            <span x-show="$store.notifications.count > 0"
+                  class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              <span x-text="$store.notifications.count"></span>
+            </span>
+          </button>
+
+          <div x-show="open" @click.outside="open = false"
+             class="absolute right-0 top-10 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+            <div class="p-3 text-sm font-medium border-b">Notifications</div>
+            <div class="max-h-96 overflow-y-auto" id="notification-list">
+              <template x-if="$store.notifications.list.length === 0">
+                <p class="p-4 text-center text-gray-500">No new notifications</p>
+              </template>
+              <template x-for="notif in $store.notifications.list" :key="notif.id">
+                <div class="p-3 hover:bg-gray-50 border-b last:border-0">
+                  <p class="text-sm font-medium" x-text="notif.title"></p>
+                  <p class="text-xs text-gray-600 mt-1" x-text="notif.message"></p>
+                </div>
+              </template>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Messages -->
-      <div class="relative" id="message-envelope">
-        <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl block text-center relative">
+        <a href="{{ url_for('messages_page') }}" class="relative text-gray-700 hover:text-red-500 text-xl">
           <i class="fas fa-envelope"></i>
-          <span id="message-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+          <span x-show="$store.messages.unread > 0"
+                class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            <span x-text="$store.messages.unread"></span>
+          </span>
         </a>
       </div>
-    </div>
 
-    <!-- Main Navigation Links -->
-    <nav class="flex-1 p-4">
-      <ul class="space-y-2">
-        <li>
-          <a href="{{ url_for('user_dashboard') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-home w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>Dashboard</span>
-          </a>
-        </li>
-        <li>
-          <a href="{{ url_for('edit_profile') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-user w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>Edit Profile</span>
-          </a>
-        </li>
-        <li>
-          <a href="{{ url_for('pricing') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-credit-card w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>Subscription</span>
-          </a>
-        </li>
-        <li>
-          <a href="{{ url_for('my_bookings') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-calendar w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>My Bookings</span>
-          </a>
-        </li>
-        <li>
-          <a href="{{ url_for('messages_page') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-envelope w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>Messages</span>
-          </a>
-        </li>
-        <li>
-          <a href="{{ url_for('form') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-file-medical w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>Health Prediction</span>
-          </a>
-        </li>
-        <li>
-          <a href="{{ url_for('chat') }}"
-             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-            <i class="fas fa-robot w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900 mr-3"></i>
-            <span>AI Consultation</span>
-          </a>
-        </li>
-        <li class="pt-4 border-t border-gray-200"> <!-- Separator -->
-          <a href="#" onclick="confirmDelete(); return false;"
-             class="flex items-center p-2 text-red-600 rounded-lg hover:bg-red-50 group transition-colors duration-200">
-            <i class="fas fa-trash w-5 h-5 text-red-500 transition duration-75 group-hover:text-red-700 mr-3"></i>
-            <span>Delete Account</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
+      <!-- Navigation -->
+      <nav class="flex-1 overflow-y-auto py-4">
+        <ul class="px-3 space-y-1">
+          <!-- Each item: icon + label (hidden when collapsed, shown on hover/open) -->
+          {% macro nav_item(href, icon, label, active=False) %}
+          <li>
+            <a href="{{ href }}"
+               class="flex items-center rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100 transition group
+                      {{ 'bg-gray-100 font-medium' if active else '' }}">
+              <i class="{{ icon }} w-6 text-center text-gray-600 group-hover:text-gray-900"></i>
+              <span class="ml-3 transition-opacity duration-200"
+                    :class="{ 'opacity-100': sidebarOpen || sidebarHover, 'opacity-0 lg:opacity-100': !(sidebarOpen || sidebarHover) }">
+                {{ label }}
+              </span>
+            </a>
+          </li>
+          {% endmacro %}
+
+          {{ nav_item(url_for('user_dashboard'), 'fas fa-home', 'Dashboard', request.endpoint == 'user_dashboard') }}
+          {{ nav_item(url_for('edit_profile'), 'fas fa-user', 'Edit Profile') }}
+          {{ nav_item(url_for('pricing'), 'fas fa-credit-card', 'Subscription') }}
+          {{ nav_item(url_for('my_bookings'), 'fas fa-calendar', 'My Bookings') }}
+          {{ nav_item(url_for('messages_page'), 'fas fa-envelope', 'Messages') }}
+          {{ nav_item(url_for('form'), 'fas fa-file-medical', 'Health Prediction') }}
+          {{ nav_item(url_for('chat'), 'fas fa-robot', 'AI Consultation') }}
+
+          <li class="pt-4 border-t border-gray-200 mt-4">
+            <a href="#" onclick="confirmDelete(); return false;"
+               class="flex items-center rounded-lg px-3 py-2 text-red-600 hover:bg-red-50 transition group">
+              <i class="fas fa-trash w-6 text-center"></i>
+              <span class="ml-3 transition-opacity duration-200"
+                    :class="{ 'opacity-100': sidebarOpen || sidebarHover, 'opacity-0 lg:opacity-100': !(sidebarOpen || sidebarHover) }">
+                Delete Account
+              </span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Overlay for mobile -->
+  <div x-show="sidebarOpen"
+       @click="sidebarOpen = false"
+       class="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden transition-opacity"
+       :class="{ 'opacity-100': sidebarOpen, 'opacity-0 pointer-events-none': !sidebarOpen }">
   </div>
 </div>
+
+<!-- Alpine.js + Optional Store for Notifications/Messages (add in base template) -->
+<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.store('notifications', {
+      count: 3,
+      list: [
+        { id: 1, title: 'New message', message: 'You have a new message from Dr. Smith' },
+        { id: 2, title: 'Booking confirmed', message: 'Your appointment is scheduled' },
+        { id: 3, title: 'Payment received', message: 'Thank you for your subscription' },
+      ]
+    });
+
+    Alpine.store('messages', {
+      unread: 5
+    });
+  });
+</script>
