@@ -225,55 +225,140 @@
         .dark .nav-active {
             @apply text-red-400;
         }
-
-        /* --- SIDEBAR LAYOUT STYLES --- */
-        /* Desktop: Adjust main content to make space for sidebar */
-        @media (min-width: 768px) { /* Use md: or lg: breakpoint as needed, e.g., 768px or 1024px */
-            body.has-sidebar {
-                padding-left: 250px; /* Match the width of the sidebar */
-            }
-            .main-content-area {
-                margin-left: 250px; /* Match the width of the sidebar */
-                width: calc(100% - 250px); /* Optional: explicitly set width */
-            }
-        }
-
-        /* Mobile: Ensure sidebar doesn't interfere initially */
-        @media (max-width: 767px) { /* Use md: or lg: breakpoint as needed */
-            .sidebar {
-                position: relative !important; /* Override position-fixed on mobile */
-                width: 100% !important;        /* Full width on mobile */
-                height: auto !important;       /* Auto height */
-                z-index: 1000;                /* Ensure it's above main content if needed */
-            }
-            /* Adjust main content margin on mobile if sidebar is present */
-            .main-content-area {
-                margin-left: 0;
-                width: 100%;
-            }
-            /* Consider making it a collapsible drawer if desired */
-            /* .sidebar.hidden { display: none; } */
-            /* .sidebar.shown { display: block; } */
-        }
-
-        /* Style for the sidebar itself */
-        .sidebar {
-            /* These are typically applied for desktop view */
-            /* position: fixed;  <-- This is set in the _sidebar.html template */
-            /* width: 250px;    <-- This is set in the _sidebar.html template */
-            /* top: 0;         <-- This is set in the _sidebar.html template */
-            /* left: 0;        <-- This is set in the _sidebar.html template */
-            /* height: 100vh;  <-- This is set in the _sidebar.html template */
-            /* z-index: 1000; <-- This is set in the _sidebar.html template */
-            /* background-color: ...; <-- This is set in the _sidebar.html template */
-            /* border-right: ...; <-- This is set in the _sidebar.html template */
-            /* padding: ...; <-- This is set in the _sidebar.html template */
-            /* overflow-y: auto; <-- This is set in the _sidebar.html template */
-        }
     </style>
 </head>
 
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300 {% if request.endpoint in ['user_dashboard', 'doctor_dashboard'] %}has-sidebar{% endif %}"> <!-- Add 'has-sidebar' class conditionally -->
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
+    <!-- ==================== SIDEBAR (with toggle) ==================== -->
+    <!-- Sidebar Container -->
+    <!-- Use fixed positioning and z-index to overlay content -->
+    <!-- Transition classes for smooth slide-in/out -->
+    <!-- Transform translate-x-0 for open, -translate-x-full for closed -->
+    <!-- Backdrop for overlay effect (optional, shown when closed) -->
+    <div id="sidebar-container"
+         class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:shadow-none"
+         aria-labelledby="sidebar-label"
+         role="dialog"
+         aria-modal="true">
+      <div class="h-full overflow-y-auto flex flex-col">
+        <!-- Sidebar Header with Close Button (for mobile) -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 id="sidebar-label" class="text-lg font-semibold text-gray-800">Settings</h2>
+          <!-- Close button visible only on smaller screens when sidebar is open -->
+          <button id="sidebar-toggle-close" class="lg:hidden text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500">
+            <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Notifications & Messages Icons (Top Section) -->
+        <div class="flex justify-between px-4 py-3 border-b border-gray-200">
+          <!-- Notifications -->
+          <div class="relative flex-1 me-2" id="notification-bell">
+            <a href="#" class="text-gray-700 hover:text-red-500 text-xl block text-center relative" onclick="toggleDropdown('notif-dropdown'); return false;">
+              <i class="fas fa-bell"></i>
+              <span id="notification-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+            </a>
+            <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
+              <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
+                Loading...
+              </div>
+            </div>
+          </div>
+
+          <!-- Messages -->
+          <div class="relative flex-1 ms-2" id="message-envelope">
+            <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl block text-center relative">
+              <i class="fas fa-envelope"></i>
+              <span id="message-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Sidebar Navigation Links (Main Content) -->
+        <nav class="flex-1 p-4">
+          <ul class="space-y-2">
+            <li>
+              <a href="{{ url_for('user_dashboard') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 21">
+                  <path d="M16.975 18.134H19V12a2 2 0 0 0-2-2h-3a2 2 0 0 0-2 2v1h-1v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6.134h2.025A2.97 2.97 0 0 0 9 16.25a2.97 2.97 0 0 0 5 1.884ZM11 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                </svg>
+                <span class="ms-3">Dashboard</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('edit_profile') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
+                  <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.586A4.5 4.5 0 0 0 7.5 8.5H4.5V7a2.5 2.5 0 0 0-5 0v9a2.5 2.5 0 0 0 5 0V13.5h3v2.5a2.5 2.5 0 0 0 5 0V7.5a2.5 2.5 0 0 0-2.5-2.5h-1V4.5a2.5 2.5 0 0 0 0-5h5a2.5 2.5 0 0 0 2.5 2.5v10.5a2.5 2.5 0 0 0 5 0V4.5a2.5 2.5 0 0 0-2.5-2.5h-5Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">Edit Profile</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('pricing') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">Subscription</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('my_bookings') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">My Bookings</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('messages_page') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
+                  <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.586A4.5 4.5 0 0 0 7.5 8.5H4.5V7a2.5 2.5 0 0 0-5 0v9a2.5 2.5 0 0 0 5 0V13.5h3v2.5a2.5 2.5 0 0 0 5 0V7.5a2.5 2.5 0 0 0-2.5-2.5h-1V4.5a2.5 2.5 0 0 0 0-5h5a2.5 2.5 0 0 0 2.5 2.5v10.5a2.5 2.5 0 0 0 5 0V4.5a2.5 2.5 0 0 0-2.5-2.5h-5Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">Messages</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('form') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">Health Prediction</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('chat') }}"
+                 class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">AI Consultation</span>
+              </a>
+            </li>
+            <li class="mt-auto pt-4 border-t border-gray-200"> <!-- Spacer and separator for Danger Zone -->
+              <a href="#" onclick="confirmDelete(); return false;"
+                 class="flex items-center p-2 text-red-600 rounded-lg hover:bg-red-50 group transition-colors duration-200">
+                <svg class="flex-shrink-0 w-5 h-5 text-red-500 transition duration-75 group-hover:text-red-700" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+                </svg>
+                <span class="flex-1 ms-3 whitespace-nowrap">Delete Account</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+
+    <!-- Overlay for mobile view (hidden by default, shown when sidebar is open) -->
+    <div id="sidebar-overlay" class="fixed inset-0 z-40 bg-black bg-opacity-50 hidden lg:hidden"></div>
+
     <!-- ==================== NAVBAR ==================== -->
     <!-- Ensure the navbar container is relative to the document flow -->
     <nav class="bg-white shadow-lg py-4 sticky top-0 z-50 transition-all duration-300 sticky-nav">
@@ -292,34 +377,17 @@
                 <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
             </button>
 
-            <!-- Icons: Notifications & Messages (desktop) - REMOVED FROM HERE -->
-            <!-- <div class="hidden sm:flex items-center space-x-4 ml-4"> -->
-            <!--     {% if session.get('user_id') %} -->
-            <!--     <div class="relative" id="notification-bell"> -->
-            <!--         <a href="#" class="text-gray-700 hover:text-red-500 text-xl" onclick="toggleDropdown('notif-dropdown'); return false;"> -->
-            <!--             <i class="fas fa-bell"></i> -->
-            <!--             <span id="notification-count-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span> -->
-            <!--         </a> -->
-            <!--         <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50"> -->
-            <!--             <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list"> -->
-            <!--                 Loading... -->
-            <!--             </div> -->
-            <!--         </div> -->
-            <!--     </div> -->
-
-            <!--     <div class="relative" id="message-envelope"> -->
-            <!--         <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl"> -->
-            <!--             <i class="fas fa-envelope"></i> -->
-            <!--             <span id="message-count-badge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span> -->
-            <!--         </a> -->
-            <!--     </div> -->
-            <!--     {% endif %} -->
-            <!-- </div> -->
-
-            <!-- Mobile hamburger -->
+            <!-- Mobile hamburger for main menu -->
             <button id="mobile-menu-toggle" class="sm:hidden text-gray-700 focus:outline-none z-50"
                 aria-label="Toggle menu">
                 <i id="menu-icon" class="fas fa-bars text-2xl transition-transform duration-300"></i>
+            </button>
+
+            <!-- Sidebar Toggle Button (Visible on smaller screens, hidden on large) -->
+            <button id="sidebar-toggle-open" class="lg:hidden text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500" onclick="toggleSidebar()">
+                <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
             </button>
 
             <!-- Navigation links -->
@@ -372,116 +440,113 @@
 
     <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
     <!-- Use a flex container to manage sidebar and main content -->
-    <div class="flex flex-1 flex-col md:flex-row"> <!-- Use flex on smaller screens, row on md+ -->
-        <!-- Sidebar will be included conditionally in dashboard templates -->
-        <!-- The sidebar template (_sidebar.html) should have the class 'sidebar' -->
-        {% block sidebar %}{% endblock %}
-
-        <!-- ==================== MAIN CONTENT AREA ==================== -->
-        <!-- Apply the responsive margin/padding classes here -->
-        <main class="main-content-area flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
+    <div class="flex flex-1 flex-col md:ml-64 lg:ml-0"> <!-- Use flex on smaller screens, ml-64 on md+, ml-0 on lg+ -->
+        <!-- The main content area will take the remaining space -->
+        <main class="flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
             <div data-aos="fade-up">
                 {% block content %}{% endblock %}
             </div>
         </main>
-    </div>
 
-    <!-- Footer -->
-    <footer class="bg-gray-900 text-gray-300 mt-auto">
-        <div class="container mx-auto px-4 py-8 sm:py-12">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <!-- Footer -->
+        <footer class="bg-gray-900 text-gray-300 mt-auto">
+            <div class="container mx-auto px-4 py-8 sm:py-12">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
 
-                <!-- Column 1 -->
-                <div data-aos="fade-right" data-aos-delay="100">
-                    <h3 class="text-lg sm:text-xl font-bold text-white mb-4 flex items-center">
-                        <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
-                    </h3>
-                    <p class="mb-4 text-base leading-relaxed">
-                        CardioGuard is an AI-powered diagnostic tool designed to help healthcare professionals and
-                        individuals assess the likelihood of heart disease. By combining clinical parameters and data
-                        science, it delivers fast, data-driven insights.
-                    </p>
-                    <div class="flex space-x-4">
-                        <a href="#"
-                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                class="fab fa-facebook-f"></i></a>
-                        <a href="#"
-                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                class="fab fa-twitter"></i></a>
-                        <a href="#"
-                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                class="fab fa-instagram"></i></a>
-                        <a href="#"
-                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                class="fab fa-linkedin-in"></i></a>
+                    <!-- Column 1 -->
+                    <div data-aos="fade-right" data-aos-delay="100">
+                        <h3 class="text-lg sm:text-xl font-bold text-white mb-4 flex items-center">
+                            <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
+                        </h3>
+                        <p class="mb-4 text-base leading-relaxed">
+                            CardioGuard is an AI-powered diagnostic tool designed to help healthcare professionals and
+                            individuals assess the likelihood of heart disease. By combining clinical parameters and data
+                            science, it delivers fast, data-driven insights.
+                        </p>
+                        <div class="flex space-x-4">
+                            <a href="#"
+                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                    class="fab fa-facebook-f"></i></a>
+                            <a href="#"
+                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                    class="fab fa-twitter"></i></a>
+                            <a href="#"
+                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                    class="fab fa-instagram"></i></a>
+                            <a href="#"
+                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                    class="fab fa-linkedin-in"></i></a>
+                        </div>
+                    </div>
+
+                    <!-- Column 2 -->
+                    <div data-aos="fade-up" data-aos-delay="200">
+                        <h3 class="text-lg font-semibold text-white mb-4">Quick Links</h3>
+                        <ul class="space-y-2 text-base">
+                            {% for link, text in [('/', 'Home'), ('/about', 'About Us'), ('/contact', 'Contact'), ('/form',
+                    'Predict'), ('/resources', 'Resources')] %}
+                            <li>
+                                <a href="{{ link }}"
+                                    class="hover:text-white transition-all duration-300 flex items-center group">
+                                    <span class="inline-block w-0 group-hover:w-3 transition-all duration-300">→</span> {{
+                                        text
+                                    }}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <!-- Column 3 -->
+                    <div data-aos="fade-up" data-aos-delay="300">
+                        <h3 class="text-lg font-semibold text-white mb-4">Services</h3>
+                        <ul class="space-y-2 text-base">
+                            <li><a href="#" class="hover:text-white transition-all duration-300">Remote Patient
+                                Monitoring</a></li>
+                            <li><a href="#" class="hover:text-white transition-all duration-300">Telecardiology
+                                Consultations</a></li>
+                            <li><a href="#" class="hover:text-white transition-all duration-300">Dietary Prescription</a>
+                            </li>
+                            <li><a href="#" class="hover:text-white transition-all duration-300">AI Exercise Partner</a>
+                            </li>
+                            <li><a href="#" class="hover:text-white transition-all duration-300">HealthTech</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Column 4 -->
+                    <div data-aos="fade-left" data-aos-delay="400">
+                        <h3 class="text-lg font-semibold text-white mb-4">Contact Us</h3>
+                        <ul class="space-y-3 text-base">
+                            <li class="flex items-start hover:text-white transition-all duration-300">
+                                <i class="fas fa-map-marker-alt mt-1 mr-3 text-red-500"></i>
+                                <span>BLK 4 Railway Compound, Ibadan.</span>
+                            </li>
+                            <li class="flex items-center hover:text-white transition-all duration-300">
+                                <i class="fas fa-phone mr-3 text-red-500"></i>
+                                <a href="tel:+2348066127153" class="hover:underline">+234 8066127153</a>
+                            </li>
+                            <li class="flex items-center hover:text-white transition-all duration-300">
+                                <i class="fas fa-envelope mr-3 text-red-500"></i>
+                                <a href="mailto:muftaudeenyusufbabatunde@gmail.com"
+                                    class="hover:underline break-all">muftaudeenyusufbabatunde@gmail.com</a>
+                            </li>
+                            <li class="flex items-center hover:text-white transition-all duration-300">
+                                <i class="fas fa-clock mr-3 text-red-500"></i>
+                                <span>Mon–Fri: 9AM – 10PM</span>
+                            </li>
+                        </ul>
                     </div>
                 </div>
 
-                <!-- Column 2 -->
-                <div data-aos="fade-up" data-aos-delay="200">
-                    <h3 class="text-lg font-semibold text-white mb-4">Quick Links</h3>
-                    <ul class="space-y-2 text-base">
-                        {% for link, text in [('/', 'Home'), ('/about', 'About Us'), ('/contact', 'Contact'), ('/form',
-                        'Predict'), ('/resources', 'Resources')] %}
-                        <li>
-                            <a href="{{ link }}"
-                                class="hover:text-white transition-all duration-300 flex items-center group">
-                                <span class="inline-block w-0 group-hover:w-3 transition-all duration-300">→</span> {{
-                                text }}
-                            </a>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-
-                <!-- Column 3 -->
-                <div data-aos="fade-up" data-aos-delay="300">
-                    <h3 class="text-lg font-semibold text-white mb-4">Services</h3>
-                    <ul class="space-y-2 text-base">
-                        <li><a href="#" class="hover:text-white transition-all duration-300">Remote Patient
-                                Monitoring</a></li>
-                        <li><a href="#" class="hover:text-white transition-all duration-300">Telecardiology
-                                Consultations</a></li>
-                        <li><a href="#" class="hover:text-white transition-all duration-300">Dietary Prescription</a>
-                        </li>
-                        <li><a href="#" class="hover:text-white transition-all duration-300">AI Exercise Partner</a>
-                        </li>
-                        <li><a href="#" class="hover:text-white transition-all duration-300">HealthTech</a></li>
-                    </ul>
-                </div>
-
-                <!-- Column 4 -->
-                <div data-aos="fade-left" data-aos-delay="400">
-                    <h3 class="text-lg font-semibold text-white mb-4">Contact Us</h3>
-                    <ul class="space-y-3 text-base">
-                        <li class="flex items-start hover:text-white transition-all duration-300">
-                            <i class="fas fa-map-marker-alt mt-1 mr-3 text-red-500"></i>
-                            <span>BLK 4 Railway Compound, Ibadan.</span>
-                        </li>
-                        <li class="flex items-center hover:text-white transition-all duration-300">
-                            <i class="fas fa-phone mr-3 text-red-500"></i>
-                            <a href="tel:+2348066127153" class="hover:underline">+234 8066127153</a>
-                        </li>
-                        <li class="flex items-center hover:text-white transition-all duration-300">
-                            <i class="fas fa-envelope mr-3 text-red-500"></i>
-                            <a href="mailto:muftaudeenyusufbabatunde@gmail.com"
-                                class="hover:underline break-all">muftaudeenyusufbabatunde@gmail.com</a>
-                        </li>
-                        <li class="flex items-center hover:text-white transition-all duration-300">
-                            <i class="fas fa-clock mr-3 text-red-500"></i>
-                            <span>Mon–Fri: 9AM – 10PM</span>
-                        </li>
-                    </ul>
+                <div class="border-t border-gray-800 mt-12 pt-8 text-center text-base animate-fade-in">
+                    <p>&copy; 2025 CardioGuard. Built with <span class="text-red-500">❤️</span> by Team VitalGuide of
+                        PROGRESS ICT MEDIA CONCEPTS.</p>
                 </div>
             </div>
+        </footer>
+    </div>
 
-            <div class="border-t border-gray-800 mt-12 pt-8 text-center text-base animate-fade-in">
-                <p>&copy; 2025 CardioGuard. Built with <span class="text-red-500">❤️</span> by Team VitalGuide of
-                    PROGRESS ICT MEDIA CONCEPTS.</p>
-            </div>
-        </div>
-    </footer>
-        {% if session.get('user_id') %}
+    {% if session.get('user_id') %}
     <script>
         // Toggle notification dropdown
         function toggleDropdown(id) {
@@ -548,6 +613,62 @@
         });
     </script>
     {% endif %}
+
+    <!-- Script for Sidebar Toggle -->
+    <script>
+        // Function to toggle sidebar open/closed state
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar-container');
+            const overlay = document.getElementById('sidebar-overlay');
+            const isOpen = !sidebar.classList.contains('-translate-x-full');
+
+            if (isOpen) {
+                // Close sidebar
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            } else {
+                // Open sidebar
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        // Attach event listener to the close toggle button (inside the sidebar)
+        document.getElementById('sidebar-toggle-close').addEventListener('click', toggleSidebar);
+
+        // Attach event listener to the overlay to close the sidebar when clicked
+        document.getElementById('sidebar-overlay').addEventListener('click', toggleSidebar);
+
+        function confirmDelete() {
+            if (confirm("Are you sure you want to delete your account permanently? This action cannot be undone.")) {
+                // Submit a POST request to the delete endpoint
+                fetch('/user/account/delete', {
+                    method: 'POST',
+                    credentials: 'same-origin', // Include session cookies
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Include CSRF token if you use one
+                        // 'X-CSRFToken': getCookie('csrftoken') // Example CSRF token
+                    },
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Redirect to index or login after successful deletion
+                        window.location.href = "{{ url_for('index') }}";
+                    } else {
+                        alert("Failed to delete account. Please try again.");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert("An error occurred. Please try again.");
+                });
+            }
+        }
+
+        // Helper function to get CSRF token from cookie (if applicable)
+        // function getCookie(name) { ... }
+    </script>
 
 </body>
 

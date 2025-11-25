@@ -29,7 +29,7 @@
                     </p>
                 </div>
                 <span class="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap ml-2">
-                    {{ conv.last_message_time|datetime_from_iso|default(now(), true)|strftime('%H:%M') }}
+                    {{ conv.last_message_time|datetime_from_iso|default(now(), true) }}
                 </span>
             </a>
             {% else %}

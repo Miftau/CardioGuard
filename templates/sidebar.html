@@ -1,76 +1,170 @@
 <!-- templates/_sidebar.html -->
-<div class="sidebar d-flex flex-column p-3 bg-light border-end vh-100 position-fixed" style="width: 250px;">
-    <!-- Notifications & Messages Icons 
-    <div class="d-flex justify-content-between mb-4">
-        <!-- Notifications -->
-        <div class="relative flex-grow-1 me-2" id="notification-bell">
-            <a href="#" class="text-gray-700 hover:text-red-500 text-xl d-block text-center" onclick="toggleDropdown('notif-dropdown'); return false;">
-                <i class="fas fa-bell"></i>
-                <span id="notification-count-badge" class="absolute -top-1 -end-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
-            </a>
-            <div id="notif-dropdown" class="absolute end-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
-                <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
-                    Loading...
-                </div>
-            </div>
-        </div>
-
-        <!-- Messages -->
-        <div class="relative flex-grow-1 ms-2" id="message-envelope">
-            <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl d-block text-center">
-                <i class="fas fa-envelope"></i>
-                <span id="message-count-badge" class="absolute -top-1 -end-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
-            </a>
-        </div>
+<!-- Sidebar Container -->
+<!-- Use fixed positioning and z-index to overlay content -->
+<!-- Transition classes for smooth slide-in/out -->
+<!-- Transform translate-x-0 for open, -translate-x-full for closed -->
+<!-- Backdrop for overlay effect (optional, shown when closed) -->
+<div id="sidebar-container"
+     class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:shadow-none"
+     aria-labelledby="sidebar-label"
+     role="dialog"
+     aria-modal="true">
+  <div class="h-full overflow-y-auto flex flex-col">
+    <!-- Sidebar Header with Close Button (for mobile) -->
+    <div class="flex items-center justify-between p-4 border-b border-gray-200">
+      <h2 id="sidebar-label" class="text-lg font-semibold text-gray-800">Settings</h2>
+      <!-- Close button visible only on smaller screens when sidebar is open -->
+      <button id="sidebar-toggle-close" class="lg:hidden text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500">
+        <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
 
-    <h5 class="mb-4">Settings</h5>
-    <ul class="nav flex-column">
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('user_dashboard') }}">
-                <i class="bi bi-speedometer2"></i> Dashboard
-            </a>
+    <!-- Notifications & Messages Icons (Top Section) -->
+    <div class="flex justify-between px-4 py-3 border-b border-gray-200">
+      <!-- Notifications -->
+      <div class="relative flex-1 me-2" id="notification-bell">
+        <a href="#" class="text-gray-700 hover:text-red-500 text-xl block text-center relative" onclick="toggleDropdown('notif-dropdown'); return false;">
+          <i class="fas fa-bell"></i>
+          <span id="notification-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+        </a>
+        <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
+          <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
+            Loading...
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="relative flex-1 ms-2" id="message-envelope">
+        <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl block text-center relative">
+          <i class="fas fa-envelope"></i>
+          <span id="message-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Sidebar Navigation Links (Main Content) -->
+    <nav class="flex-1 p-4">
+      <ul class="space-y-2">
+        <li>
+          <a href="{{ url_for('user_dashboard') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 22 21">
+              <path d="M16.975 18.134H19V12a2 2 0 0 0-2-2h-3a2 2 0 0 0-2 2v1h-1v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6.134h2.025A2.97 2.97 0 0 0 9 16.25a2.97 2.97 0 0 0 5 1.884ZM11 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+            </svg>
+            <span class="ms-3">Dashboard</span>
+          </a>
         </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('edit_profile') }}">
-                <i class="bi bi-person"></i> Edit Profile
-            </a>
+        <li>
+          <a href="{{ url_for('edit_profile') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
+              <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.586A4.5 4.5 0 0 0 7.5 8.5H4.5V7a2.5 2.5 0 0 0-5 0v9a2.5 2.5 0 0 0 5 0V13.5h3v2.5a2.5 2.5 0 0 0 5 0V7.5a2.5 2.5 0 0 0-2.5-2.5h-1V4.5a2.5 2.5 0 0 0 0-5h5a2.5 2.5 0 0 0 2.5 2.5v10.5a2.5 2.5 0 0 0 5 0V4.5a2.5 2.5 0 0 0-2.5-2.5h-5Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">Edit Profile</span>
+          </a>
         </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('pricing') }}">
-                <i class="bi bi-credit-card"></i> Subscription
-            </a>
+        <li>
+          <a href="{{ url_for('pricing') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">Subscription</span>
+          </a>
         </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('my_bookings') }}">
-                <i class="bi bi-calendar-check"></i> My Bookings
-            </a>
+        <li>
+          <a href="{{ url_for('my_bookings') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">My Bookings</span>
+          </a>
         </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('messages_page') }}"> <!-- Link also exists above -->
-                <i class="bi bi-envelope"></i> Messages
-            </a>
+        <li>
+          <a href="{{ url_for('messages_page') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
+              <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.586A4.5 4.5 0 0 0 7.5 8.5H4.5V7a2.5 2.5 0 0 0-5 0v9a2.5 2.5 0 0 0 5 0V13.5h3v2.5a2.5 2.5 0 0 0 5 0V7.5a2.5 2.5 0 0 0-2.5-2.5h-1V4.5a2.5 2.5 0 0 0 0-5h5a2.5 2.5 0 0 0 2.5 2.5v10.5a2.5 2.5 0 0 0 5 0V4.5a2.5 2.5 0 0 0-2.5-2.5h-5Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">Messages</span>
+          </a>
         </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('form') }}">
-                <i class="bi bi-file-medical"></i> Health Prediction
-            </a>
+        <li>
+          <a href="{{ url_for('form') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">Health Prediction</span>
+          </a>
         </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('chat') }}">
-                <i class="bi bi-robot"></i> AI Consultation
-            </a>
+        <li>
+          <a href="{{ url_for('chat') }}"
+             class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">AI Consultation</span>
+          </a>
         </li>
-        <!-- Add more links as needed: Notification Settings, Privacy, etc. -->
-        <li class="nav-item mt-auto">
-            <a class="nav-link text-danger" href="#" onclick="confirmDelete()">
-                <i class="bi bi-trash"></i> Delete Account
-            </a>
+        <li class="mt-auto pt-4 border-t border-gray-200"> <!-- Spacer and separator for Danger Zone -->
+          <a href="#" onclick="confirmDelete(); return false;"
+             class="flex items-center p-2 text-red-600 rounded-lg hover:bg-red-50 group transition-colors duration-200">
+            <svg class="flex-shrink-0 w-5 h-5 text-red-500 transition duration-75 group-hover:text-red-700" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z"/>
+            </svg>
+            <span class="flex-1 ms-3 whitespace-nowrap">Delete Account</span>
+          </a>
         </li>
-    </ul>
+      </ul>
+    </nav>
+  </div>
 </div>
 
+<!-- Overlay for mobile view (hidden by default, shown when sidebar is open) -->
+<div id="sidebar-overlay" class="fixed inset-0 z-40 bg-black bg-opacity-50 hidden lg:hidden"></div>
+
 <script>
+ // Function to toggle sidebar open/closed state
+ function toggleSidebar() {
+     const sidebar = document.getElementById('sidebar-container');
+     const overlay = document.getElementById('sidebar-overlay');
+     const isOpen = !sidebar.classList.contains('-translate-x-full');
+
+     if (isOpen) {
+         // Close sidebar
+         sidebar.classList.add('-translate-x-full');
+         overlay.classList.add('hidden');
+     } else {
+         // Open sidebar
+         sidebar.classList.remove('-translate-x-full');
+         overlay.classList.remove('hidden');
+     }
+ }
+
+ // Attach event listener to the open toggle button (you'll need to add this button in your main template, e.g., base.html)
+ // Example: document.getElementById('sidebar-toggle-open').addEventListener('click', toggleSidebar);
+
+ // Attach event listener to the close toggle button (inside the sidebar)
+ document.getElementById('sidebar-toggle-close').addEventListener('click', toggleSidebar);
+
+ // Attach event listener to the overlay to close the sidebar when clicked
+ document.getElementById('sidebar-overlay').addEventListener('click', toggleSidebar);
+
+ // Optional: Close sidebar when clicking outside (on main content) - requires checking click target
+ // document.addEventListener('click', function(event) {
+ //     const sidebar = document.getElementById('sidebar-container');
+ //     const toggleButton = document.getElementById('sidebar-toggle-open'); // You need the open button ID
+ //     if (!sidebar.contains(event.target) && !toggleButton.contains(event.target) && window.innerWidth < 1024) { // lg breakpoint
+ //         sidebar.classList.add('-translate-x-full');
+ //         document.getElementById('sidebar-overlay').classList.add('hidden');
+ //     }
+ // });
+
  function confirmDelete() {
      if (confirm("Are you sure you want to delete your account permanently? This action cannot be undone.")) {
          // Submit a POST request to the delete endpoint
@@ -97,6 +191,7 @@
          });
      }
  }
+
  // Helper function to get CSRF token from cookie (if applicable)
  // function getCookie(name) { ... }
 </script>
