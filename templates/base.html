@@ -19,6 +19,102 @@
     <!-- Favicon -->
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966488.png">
 
+    <!-- Preload heartbeat sound (optional) -->
+    <link rel="preload" href="https://assets.mixkit.co/sfx/preview/mixkit-heartbeat-747.mp3" as="audio">
+
+    <!-- ---------------------------------------------------- -->
+    <!--  DARK MODE & NAVBAR JS (only one copy)               -->
+    <!-- ---------------------------------------------------- -->
+    <script>
+        // ---- 1. Dark-mode init -------------------------------------------------
+        document.addEventListener('DOMContentLoaded', () => {
+            const html = document.documentElement;
+            const toggle = document.getElementById('dark-mode-toggle');
+            const sun = document.getElementById('dark-mode-sun'); // Target specific IDs
+            const moon = document.getElementById('dark-mode-moon');
+
+            if (!toggle) {
+                console.error("Dark mode toggle button not found!");
+                return;
+            }
+
+            // Apply saved preference or system preference
+            const saved = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = saved === 'dark' || (!saved && prefersDark);
+
+            if (isDark) {
+                html.classList.add('dark');
+                if (sun) sun.classList.add('hidden');
+                if (moon) moon.classList.remove('hidden');
+            } else {
+                if (sun) sun.classList.remove('hidden');
+                if (moon) moon.classList.add('hidden');
+            }
+
+            // Toggle handler
+            toggle.addEventListener('click', () => {
+                html.classList.toggle('dark');
+                const isCurrentlyDark = html.classList.contains('dark');
+                localStorage.setItem('darkMode', isCurrentlyDark ? 'dark' : 'light');
+                if (sun) {
+                    sun.classList.toggle('hidden', isCurrentlyDark);
+                }
+                if (moon) {
+                    moon.classList.toggle('hidden', !isCurrentlyDark);
+                }
+            });
+
+            // ---- 2. Navbar --------------------------------------------------------
+            const menu = document.getElementById('mobile-menu');
+            const btn = document.getElementById('mobile-menu-toggle');
+            const icon = document.getElementById('menu-icon');
+
+            if (!menu || !btn || !icon) {
+                console.warn("Mobile menu elements not found, skipping mobile menu setup.");
+                return; // Exit if mobile menu elements are missing
+            }
+
+            // Show/hide based on breakpoint
+            const handleResize = () => {
+                if (window.innerWidth >= 640) {                 // sm: breakpoint
+                    menu.classList.remove('hidden');
+                    btn.classList.add('hidden');
+                    icon.classList.remove('fa-times'); icon.classList.add('fa-bars');
+                } else {
+                    menu.classList.add('hidden');
+                    btn.classList.remove('hidden');
+                }
+            };
+            handleResize();
+            window.addEventListener('resize', handleResize);
+
+            // Toggle on button click
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                menu.classList.toggle('hidden');
+                icon.classList.toggle('fa-bars');
+                icon.classList.toggle('fa-times');
+            });
+
+            // Close when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!menu.classList.contains('hidden') &&
+                    !menu.contains(e.target) &&
+                    !btn.contains(e.target)) {
+                    menu.classList.add('hidden');
+                    icon.classList.remove('fa-times'); icon.classList.add('fa-bars');
+                }
+            });
+
+            // ---- 3. AOS init ------------------------------------------------------
+            AOS.init({ once: true, duration: 800, easing: 'ease-out-cubic' });
+        });
+    </script>
+
+    <!-- ---------------------------------------------------- -->
+    <!--  STYLES (dark-mode, animations, mobile menu)        -->
+    <!-- ---------------------------------------------------- -->
     <style>
         /* Dark-mode basics */
         .dark {
@@ -133,252 +229,86 @@
 </head>
 
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
-    <!-- ==================== SIDEBAR (with toggle) ==================== -->
-    <!-- Sidebar Container -->
-    <!-- Use fixed positioning and z-index to overlay content -->
-    <!-- Transition classes for smooth slide-in/out -->
-    <!-- Transform translate-x-0 for open, -translate-x-full for closed -->
-    <!-- Backdrop for overlay effect (optional, shown when closed) -->
-    <div id="sidebar-container"
-        class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:shadow-none"
-        aria-labelledby="sidebar-label" role="dialog" aria-modal="true">
-        <div class="h-full overflow-y-auto flex flex-col">
-            <!-- Sidebar Header with Close Button (for mobile) -->
-            <div class="flex items-center justify-between p-4 border-b border-gray-200">
-                <h2 id="sidebar-label" class="text-lg font-semibold text-gray-800">Settings</h2>
-                <!-- Close button visible only on smaller screens when sidebar is open -->
-                <button id="sidebar-toggle-close"
-                    class="lg:hidden text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500">
-                    <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Notifications & Messages Icons (Top Section) -->
-            <div class="flex justify-between px-4 py-3 border-b border-gray-200">
-                <!-- Notifications -->
-                <div class="relative flex-1 me-2" id="notification-bell">
-                    <a href="#" class="text-gray-700 hover:text-red-500 text-xl block text-center relative"
-                        onclick="toggleDropdown('notif-dropdown'); return false;">
-                        <i class="fas fa-bell"></i>
-                        <span id="notification-count-badge"
-                            class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
-                    </a>
-                    <div id="notif-dropdown"
-                        class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
-                        <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
-                            Loading...
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Messages -->
-                <div class="relative flex-1 ms-2" id="message-envelope">
-                    <a href="{{ url_for('messages_page') }}"
-                        class="text-gray-700 hover:text-red-500 text-xl block text-center relative">
-                        <i class="fas fa-envelope"></i>
-                        <span id="message-count-badge"
-                            class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Sidebar Navigation Links (Main Content) -->
-            <nav class="flex-1 p-4">
-                <ul class="space-y-2">
-                    <li>
-                        <a href="{{ url_for('user_dashboard') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 22 21">
-                                <path
-                                    d="M16.975 18.134H19V12a2 2 0 0 0-2-2h-3a2 2 0 0 0-2 2v1h-1v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6.134h2.025A2.97 2.97 0 0 0 9 16.25a2.97 2.97 0 0 0 5 1.884ZM11 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                            </svg>
-                            <span class="ms-3">Dashboard</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('edit_profile') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 18">
-                                <path
-                                    d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.586A4.5 4.5 0 0 0 7.5 8.5H4.5V7a2.5 2.5 0 0 0-5 0v9a2.5 2.5 0 0 0 5 0V13.5h3v2.5a2.5 2.5 0 0 0 5 0V7.5a2.5 2.5 0 0 0-2.5-2.5h-1V4.5a2.5 2.5 0 0 0 0-5h5a2.5 2.5 0 0 0 2.5 2.5v10.5a2.5 2.5 0 0 0 5 0V4.5a2.5 2.5 0 0 0-2.5-2.5h-5Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">Edit Profile</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('pricing') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 20">
-                                <path
-                                    d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">Subscription</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('my_bookings') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 20">
-                                <path
-                                    d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">My Bookings</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('messages_page') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 18">
-                                <path
-                                    d="M14.5 2A2.5 2.5 0 0 0 12 4.5v1.586A4.5 4.5 0 0 0 7.5 8.5H4.5V7a2.5 2.5 0 0 0-5 0v9a2.5 2.5 0 0 0 5 0V13.5h3v2.5a2.5 2.5 0 0 0 5 0V7.5a2.5 2.5 0 0 0-2.5-2.5h-1V4.5a2.5 2.5 0 0 0 0-5h5a2.5 2.5 0 0 0 2.5 2.5v10.5a2.5 2.5 0 0 0 5 0V4.5a2.5 2.5 0 0 0-2.5-2.5h-5Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">Messages</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('form') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 20">
-                                <path
-                                    d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">Health Prediction</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="{{ url_for('chat') }}"
-                            class="flex items-center p-2 text-gray-700 rounded-lg hover:bg-gray-100 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-gray-500 transition duration-75 group-hover:text-gray-900"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 20">
-                                <path
-                                    d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">AI Consultation</span>
-                        </a>
-                    </li>
-                    <li class="mt-auto pt-4 border-t border-gray-200"> <!-- Spacer and separator for Danger Zone -->
-                        <a href="#" onclick="confirmDelete(); return false;"
-                            class="flex items-center p-2 text-red-600 rounded-lg hover:bg-red-50 group transition-colors duration-200">
-                            <svg class="flex-shrink-0 w-5 h-5 text-red-500 transition duration-75 group-hover:text-red-700"
-                                aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 20 20">
-                                <path
-                                    d="M10 0a10 10 0 1 0 10 10A10.011 10.011 0 0 0 10 0Zm3.982 7.61a6 6 0 0 1-8.496 0 1 1 0 0 1 0-1.415 6 6 0 0 1 8.496 0 1 1 0 0 1 0 1.415Z" />
-                            </svg>
-                            <span class="flex-1 ms-3 whitespace-nowrap">Delete Account</span>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-        </div>
-    </div>
-
-    <!-- Overlay for mobile view (hidden by default, shown when sidebar is open) -->
-    <div id="sidebar-overlay" class="fixed inset-0 z-40 bg-black bg-opacity-50 hidden lg:hidden"></div>
-
-    <!-- ==================== NAVBAR ==================== -->
-    <!-- Ensure the navbar container is relative to the document flow -->
-    <nav class="bg-white shadow-lg py-4 sticky top-0 z-50 transition-all duration-300 sticky-nav">
-        <div class="container mx-auto flex justify-between items-center px-4 sm:px-6">
-
-            <!-- Logo -->
-            <a href="/" class="text-2xl sm:text-4xl font-bold text-red-500 flex items-center">
-                <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
-            </a>
-
-            <!-- Dark-mode toggle -->
-            <button id="dark-mode-toggle"
-                class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                aria-label="Toggle dark mode">
-                <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
-                <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
-            </button>
-
-            <!-- Mobile hamburger for main menu -->
-            <button id="mobile-menu-toggle" class="sm:hidden text-gray-700 focus:outline-none z-50"
-                aria-label="Toggle menu">
-                <i id="menu-icon" class="fas fa-bars text-2xl transition-transform duration-300"></i>
-            </button>
-
-            <!-- Sidebar Toggle Button (Visible on smaller screens, hidden on large) -->
-            <button id="sidebar-toggle-open"
-                class="lg:hidden text-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500"
-                onclick="toggleSidebar()">
-                <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-            </button>
-
-            <!-- Navigation links -->
-            <ul id="mobile-menu"
-                class="hidden flex-col w-full mt-4 space-y-4 text-gray-700 bg-white absolute top-full left-0 shadow-lg sm:shadow-none sm:flex sm:flex-row sm:space-x-6 sm:w-auto sm:mt-0 sm:space-y-0 sm:bg-transparent sm:static sm:block">
-
-                {% macro nav_item(url, label, is_external=false) %}
-                <li>
-                    <a href="{{ url }}" {% if is_external %}target="_blank" rel="noopener noreferrer" {% endif %} class="block hover:text-red-500 text-lg sm:text-xl transition-all duration-300 px-4 py-2 sm:p-0
-                      {% if request.path == url %}nav-active{% endif %}">
-                        {{ label }}
-                    </a>
-                </li>
-                {% endmacro %}
-
-                {{ nav_item('/', 'Home') }}
-                {{ nav_item('/about', 'About') }}
-                {{ nav_item('/contact', 'Contact') }}
-                {{ nav_item('/resources', 'Resources') }}
-                {{ nav_item('/chat', 'CardioAI') }}
-                {{ nav_item('https://renalguard.onrender.com', 'RenalGuard', is_external=true) }}
-                {{ nav_item('https://hepaguard.onrender.com', 'HepaGuard', is_external=true) }}
-
-                <li>
-                    <a href="/form" class="block bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0
-                    {% if request.path == '/form' %}nav-active bg-red-600{% endif %}">
-                        Predict Now
-                    </a>
-                </li>
-
-                <!-- Login / Logout -->
-                {% if session.get('user_id') %}
-                <li>
-                    <a href="/logout"
-                        class="block bg-gray-800 text-white px-4 py-2 rounded-full hover:bg-gray-900 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
-                        Logout
-                    </a>
-                </li>
-                {% else %}
-                <li>
-                    <a href="/login"
-                        class="block bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
-                        Login
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-        </div>
-    </nav>
+    <!-- ==================== SIDEBAR (for logged-in users only) ==================== -->
+    {% block sidebar %}{% endblock %}
 
     <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
-    <!-- Use a flex container to manage sidebar and main content -->
-    <div class="flex flex-1 flex-col md:ml-64 lg:ml-0"> <!-- Use flex on smaller screens, ml-64 on md+, ml-0 on lg+ -->
-        <!-- The main content area will take the remaining space -->
+    <!-- Add left margin/padding based on whether sidebar is present -->
+    <!-- If sidebar block has content, use md:ml-64, otherwise use md:ml-0 -->
+    <div class="flex-1 flex flex-col {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}md:ml-64{% else %}md:ml-0{% endif %}">
+        <!-- ==================== NAVBAR ==================== -->
+        <!-- Ensure the navbar container is relative to the document flow -->
+        <nav class="bg-white shadow-lg py-4 sticky top-0 z-50 transition-all duration-300 sticky-nav">
+            <div class="container mx-auto flex justify-between items-center px-4 sm:px-6">
+
+                <!-- Logo -->
+                <a href="/" class="text-2xl sm:text-4xl font-bold text-red-500 flex items-center">
+                    <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
+                </a>
+
+                <!-- Dark-mode toggle -->
+                <button id="dark-mode-toggle"
+                    class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    aria-label="Toggle dark mode">
+                    <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
+                    <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
+                </button>
+
+                <!-- Mobile hamburger -->
+                <button id="mobile-menu-toggle" class="sm:hidden text-gray-700 focus:outline-none z-50"
+                    aria-label="Toggle menu">
+                    <i id="menu-icon" class="fas fa-bars text-2xl transition-transform duration-300"></i>
+                </button>
+
+                <!-- Navigation links -->
+                <ul id="mobile-menu"
+                    class="hidden flex-col w-full mt-4 space-y-4 text-gray-700 bg-white absolute top-full left-0 shadow-lg sm:shadow-none sm:flex sm:flex-row sm:space-x-6 sm:w-auto sm:mt-0 sm:space-y-0 sm:bg-transparent sm:static sm:block">
+
+                    {% macro nav_item(url, label, is_external=false) %}
+                    <li>
+                        <a href="{{ url }}" {% if is_external %}target="_blank" rel="noopener noreferrer" {% endif %} class="block hover:text-red-500 text-lg sm:text-xl transition-all duration-300 px-4 py-2 sm:p-0
+                          {% if request.path == url %}nav-active{% endif %}">
+                            {{ label }}
+                        </a>
+                    </li>
+                    {% endmacro %}
+
+                    {{ nav_item('/', 'Home') }}
+                    {{ nav_item('/about', 'About') }}
+                    {{ nav_item('/contact', 'Contact') }}
+                    {{ nav_item('/resources', 'Resources') }}
+                    {{ nav_item('/chat', 'CardioAI') }}
+                    {{ nav_item('https://renalguard.onrender.com', 'RenalGuard', is_external=true) }}
+                    {{ nav_item('https://hepaguard.onrender.com', 'HepaGuard', is_external=true) }}
+
+                    <li>
+                        <a href="/form" class="block bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0
+                        {% if request.path == '/form' %}nav-active bg-red-600{% endif %}">
+                            Predict Now
+                        </a>
+                    </li>
+
+                    <!-- Login / Logout -->
+                    {% if session.get('user_id') %}
+                    <li>
+                        <a href="/logout"
+                            class="block bg-gray-800 text-white px-4 py-2 rounded-full hover:bg-gray-900 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
+                            Logout
+                        </a>
+                    </li>
+                    {% else %}
+                    <li>
+                        <a href="/login"
+                            class="block bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
+                            Login
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+
+        <!-- ==================== MAIN CONTENT AREA ==================== -->
         <main class="flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
             <div data-aos="fade-up">
                 {% block content %}{% endblock %}
@@ -397,8 +327,7 @@
                         </h3>
                         <p class="mb-4 text-base leading-relaxed">
                             CardioGuard is an AI-powered diagnostic tool designed to help healthcare professionals and
-                            individuals assess the likelihood of heart disease. By combining clinical parameters and
-                            data
+                            individuals assess the likelihood of heart disease. By combining clinical parameters and data
                             science, it delivers fast, data-driven insights.
                         </p>
                         <div class="flex space-x-4">
@@ -421,15 +350,13 @@
                     <div data-aos="fade-up" data-aos-delay="200">
                         <h3 class="text-lg font-semibold text-white mb-4">Quick Links</h3>
                         <ul class="space-y-2 text-base">
-                            {% for link, text in [('/', 'Home'), ('/about', 'About Us'), ('/contact', 'Contact'),
-                            ('/form',
+                            {% for link, text in [('/', 'Home'), ('/about', 'About Us'), ('/contact', 'Contact'), ('/form',
                             'Predict'), ('/resources', 'Resources')] %}
                             <li>
                                 <a href="{{ link }}"
                                     class="hover:text-white transition-all duration-300 flex items-center group">
-                                    <span class="inline-block w-0 group-hover:w-3 transition-all duration-300">→</span>
-                                    {{
-                                    text
+                                    <span class="inline-block w-0 group-hover:w-3 transition-all duration-300">→</span> {{
+                                        text
                                     }}
                                 </a>
                             </li>
@@ -442,11 +369,10 @@
                         <h3 class="text-lg font-semibold text-white mb-4">Services</h3>
                         <ul class="space-y-2 text-base">
                             <li><a href="#" class="hover:text-white transition-all duration-300">Remote Patient
-                                    Monitoring</a></li>
+                                Monitoring</a></li>
                             <li><a href="#" class="hover:text-white transition-all duration-300">Telecardiology
-                                    Consultations</a></li>
-                            <li><a href="#" class="hover:text-white transition-all duration-300">Dietary
-                                    Prescription</a>
+                                Consultations</a></li>
+                            <li><a href="#" class="hover:text-white transition-all duration-300">Dietary Prescription</a>
                             </li>
                             <li><a href="#" class="hover:text-white transition-all duration-300">AI Exercise Partner</a>
                             </li>
@@ -512,7 +438,7 @@
                 // Notifications
                 const notifRes = await fetch('/api/notifications/count');
                 const notifData = await notifRes.json();
-                const notifCount = notifData.count || 0;
+                const notifCount = notifData.count or 0;
                 const notifBadge = document.getElementById('notification-count-badge');
                 if (notifCount > 0) {
                     notifBadge.textContent = Math.min(notifCount, 99); // cap at 99
@@ -525,7 +451,7 @@
                 const notifList = document.getElementById('notification-list');
                 if (notifData.notifications && notifData.notifications.length) {
                     notifList.innerHTML = notifData.notifications.map(n => `
-                        <div class="p-2 border-b border-gray-200 dark:border-gray-700">${n.message || 'New notification'}</div>
+                        <div class="p-2 border-b border-gray-200 dark:border-gray-700">${n.message or 'New notification'}</div>
                     `).join('');
                 } else {
                     notifList.innerHTML = '<div class="p-2 text-gray-500">No new notifications</div>';
@@ -534,7 +460,7 @@
                 // Messages
                 const msgRes = await fetch('/api/messages/unread_count');
                 const msgData = await msgRes.json();
-                const msgCount = msgData.count || 0;
+                const msgCount = msgData.count or 0;
                 const msgBadge = document.getElementById('message-count-badge');
                 if (msgCount > 0) {
                     msgBadge.textContent = Math.min(msgCount, 99);
@@ -555,30 +481,32 @@
     </script>
     {% endif %}
 
-    <!-- Script for Sidebar Toggle -->
+    <!-- Script for Sidebar Toggle (Optional, for future use) -->
     <script>
-        // Function to toggle sidebar open/closed state
+        // If you want to add toggle functionality later, uncomment this section
+        /*
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar-container');
-            const overlay = document.getElementById('sidebar-overlay');
             const isOpen = !sidebar.classList.contains('-translate-x-full');
 
             if (isOpen) {
                 // Close sidebar
                 sidebar.classList.add('-translate-x-full');
-                overlay.classList.add('hidden');
             } else {
                 // Open sidebar
                 sidebar.classList.remove('-translate-x-full');
-                overlay.classList.remove('hidden');
             }
         }
+
+        // Attach event listener to the open toggle button (you'll need to add this button in your main template, e.g., base.html)
+        // Example: document.getElementById('sidebar-toggle-open').addEventListener('click', toggleSidebar);
 
         // Attach event listener to the close toggle button (inside the sidebar)
         document.getElementById('sidebar-toggle-close').addEventListener('click', toggleSidebar);
 
         // Attach event listener to the overlay to close the sidebar when clicked
         document.getElementById('sidebar-overlay').addEventListener('click', toggleSidebar);
+        */
 
         function confirmDelete() {
             if (confirm("Are you sure you want to delete your account permanently? This action cannot be undone.")) {
@@ -592,18 +520,18 @@
                         // 'X-CSRFToken': getCookie('csrftoken') // Example CSRF token
                     },
                 })
-                    .then(response => {
-                        if (response.ok) {
-                            // Redirect to index or login after successful deletion
-                            window.location.href = "{{ url_for('index') }}";
-                        } else {
-                            alert("Failed to delete account. Please try again.");
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert("An error occurred. Please try again.");
-                    });
+                .then(response => {
+                    if (response.ok) {
+                        // Redirect to index or login after successful deletion
+                        window.location.href = "{{ url_for('index') }}";
+                    } else {
+                        alert("Failed to delete account. Please try again.");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert("An error occurred. Please try again.");
+                });
             }
         }
 
