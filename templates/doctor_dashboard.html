@@ -1,198 +1,168 @@
 <!-- templates/doctor_dashboard.html -->
-{% extends "base.html" %} <!-- Or however your base template is structured -->
+{% extends "base.html" %} <!-- Extend the base template -->
 
 {% block title %}Doctor Dashboard{% endblock %}
 
-{% block head %}
-<!-- Add custom CSS for sidebar layout -->
-<style>
-    body {
-        padding-left: 250px; /* Adjust to match sidebar width */
-    }
-    .main-content {
-        margin-left: 250px; /* Adjust to match sidebar width */
-    }
-    /* Responsive adjustments might be needed */
-    @media (max-width: 768px) {
-        body, .main-content {
-            padding-left: 0;
-            margin-left: 0;
-        }
-        .sidebar {
-            position: relative;
-            width: 100%;
-            height: auto;
-            z-index: 1000; /* Ensure sidebar is above other content on mobile if needed */
-        }
-    }
-</style>
-{% endblock %}
-
 {% block sidebar %}
-    {% if session.get('user_id') and session.get('role') in ['user', 'doctor'] %}
+    <!-- Only include the sidebar if a user is logged in -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
         {% include 'sidebar.html' %}
     {% endif %}
 {% endblock %}
 
 {% block content %}
+<section class="py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
+  <div class="container mx-auto px-4 max-w-7xl">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+          <span class="bg-gradient-to-r from-red-500 to-red-700 p-2 rounded-lg text-white">👨‍⚕️</span>
+          Welcome, Dr. {{ profile.name }}
+        </h1>
+        <p class="text-gray-600 mt-1">Manage your schedule and patient appointments</p>
+      </div>
+      <a href="/logout" class="bg-gradient-to-r from-red-500 to-red-600 text-white px-5 py-2.5 rounded-xl hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg transition duration-300 text-center min-w-[120px]">
+        Logout
+      </a>
+    </div>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-      <section class="py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
-        <div class="container mx-auto px-4 max-w-7xl">
-          <!-- Header -->
-          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-            <div>
-              <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                <span class="bg-gradient-to-r from-red-500 to-red-700 p-2 rounded-lg text-white">👨‍⚕️</span>
-                Welcome, Dr. {{ profile.name }}
-              </h1>
-              <p class="text-gray-600 mt-1">Manage your schedule and patient appointments</p>
-            </div>
-            <a href="/logout" class="bg-gradient-to-r from-red-500 to-red-600 text-white px-5 py-2.5 rounded-xl hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg transition duration-300 text-center min-w-[120px]">
-              Logout
-            </a>
-          </div>
-
-          <!-- Doctor Profile Card -->
-          <div class="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-100">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-              <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">👤</span>
-              Your Profile
-            </h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 class="text-lg font-medium text-gray-700 mb-2">Personal Information</h3>
-                <p class="text-gray-600"><strong>Email:</strong> {{ profile.email }}</p>
-                <p class="text-gray-600"><strong>Specialization:</strong> {{ profile.specialization }}</p>
-                <p class="text-gray-600"><strong>Consultation Fee:</strong> ${{ "%.2f"|format(profile.consultation_fee) }}</p>
-              </div>
-              <div>
-                <h3 class="text-lg font-medium text-gray-700 mb-2">Bio</h3>
-                <p class="text-gray-600">{{ profile.bio or 'No bio provided.' }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Availability Management Section -->
-          <div class="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-100">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-              <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">📅</span>
-              Manage Availability
-            </h2>
-            <a href="/doctor/availability" class="inline-block bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-md transition duration-300 mb-6">
-              Add New Availability Slot
-            </a>
-            {% if availability_slots %}
-              <div class="overflow-x-auto">
-                <table class="w-full border-collapse">
-                  <thead>
-                    <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
-                      <th class="py-3 px-4 rounded-l-lg">Date</th>
-                      <th class="py-3 px-4">Start Time</th>
-                      <th class="py-3 px-4">End Time</th>
-                      <th class="py-3 px-4 rounded-r-lg">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for slot in availability_slots %}
-                    <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
-                      <td class="py-3 px-4 font-medium text-gray-800">{{ slot.available_date }}</td>
-                      <td class="py-3 px-4 text-gray-600">{{ slot.start_time }}</td>
-                      <td class="py-3 px-4 text-gray-600">{{ slot.end_time }}</td>
-                      <td class="py-3 px-4">
-                        {% if slot.is_booked %}
-                          <span class="bg-red-100 text-red-800 text-xs px-2.5 py-1 rounded-full">Booked</span>
-                        {% else %}
-                          <span class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full">Available</span>
-                        {% endif %}
-                      </td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            {% else %}
-              <div class="text-center py-6">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p class="text-gray-600">No availability slots added yet.</p>
-              </div>
-            {% endif %}
-          </div>
-
-          <!-- Booked Appointments Section -->
-          <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
-              <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">🩺</span>
-              Your Booked Appointments
-            </h2>
-            {% if booked_appointments %}
-              <div class="overflow-x-auto">
-                <table class="w-full border-collapse">
-                  <thead>
-                    <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
-                      <th class="py-3 px-4 rounded-l-lg">Appointment Time</th>
-                      <th class="py-3 px-4">Patient Name</th>
-                      <th class="py-3 px-4">Patient Email</th>
-                      <th class="py-3 px-4">Status</th>
-                      <th class="py-3 px-4 rounded-r-lg">Actions</th> <!-- Updated header text -->
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for appt in booked_appointments %}
-                    <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
-                      <td class="py-3 px-4 font-medium text-gray-800">{{ appt.appointment_time[:16] }}</td> <!-- Format as YYYY-MM-DD HH:MM -->
-                      <td class="py-3 px-4">
-                        <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full">
-                          {{ patient_details[appt.user_id].name if patient_details[appt.user_id] else 'Unknown' }}
-                        </span>
-                      </td>
-                      <td class="py-3 px-4 text-gray-600">{{ patient_details[appt.user_id].email if patient_details[appt.user_id] else 'N/A' }}</td>
-                      <td class="py-3 px-4">
-                        <span class="bg-yellow-100 text-yellow-800 text-xs px-2.5 py-1 rounded-full">
-                          {{ appt.status | title }}
-                        </span>
-                      </td>
-                      <td class="py-3 px-4">
-                        <!-- NEW: Join Meeting Button -->
-                        {% if appt.meeting_url %}
-                          <!-- Example: Show button if appointment is within 30 mins of start time -->
-                          {% set appt_time = appt.appointment_time | datetime_from_iso %}
-                          {% set now = now() %}
-                          {% if now >= appt_time and now <= appt_time + timedelta(minutes=30) %}
-                              <a href="{{ appt.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
-                          {% else %}
-                              <!-- Optionally, show a countdown or just the link -->
-                              <!-- For now, just show the link text if not within the window -->
-                              Meeting Link Ready
-                          {% endif %}
-                        {% else %}
-                          <span class="text-gray-400 text-sm">N/A</span>
-                        {% endif %}
-                        <!-- Example action: view details or update status (placed after meeting link) -->
-                        <!-- <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm ml-2">View Details</a> -->
-                      </td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            {% else %}
-              <div class="text-center py-6">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p class="text-gray-600">You have no booked appointments scheduled.</p>
-              </div>
-            {% endif %}
-          </div>
+    <!-- Doctor Profile Card -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-100">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
+        <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">👤</span>
+        Your Profile
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h3 class="text-lg font-medium text-gray-700 mb-2">Personal Information</h3>
+          <p class="text-gray-600"><strong>Email:</strong> {{ profile.email }}</p>
+          <p class="text-gray-600"><strong>Specialization:</strong> {{ profile.specialization }}</p>
+          <p class="text-gray-600"><strong>Consultation Fee:</strong> ${{ "%.2f"|format(profile.consultation_fee) }}</p>
         </div>
-      </section>
-    </main>
+        <div>
+          <h3 class="text-lg font-medium text-gray-700 mb-2">Bio</h3>
+          <p class="text-gray-600">{{ profile.bio or 'No bio provided.' }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Availability Management Section -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-100">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
+        <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">📅</span>
+        Manage Availability
+      </h2>
+      <a href="/doctor/availability" class="inline-block bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-md transition duration-300 mb-6">
+        Add New Availability Slot
+      </a>
+      {% if availability_slots %}
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse">
+            <thead>
+              <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
+                <th class="py-3 px-4 rounded-l-lg">Date</th>
+                <th class="py-3 px-4">Start Time</th>
+                <th class="py-3 px-4">End Time</th>
+                <th class="py-3 px-4 rounded-r-lg">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for slot in availability_slots %}
+              <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
+                <td class="py-3 px-4 font-medium text-gray-800">{{ slot.available_date }}</td>
+                <td class="py-3 px-4 text-gray-600">{{ slot.start_time }}</td>
+                <td class="py-3 px-4 text-gray-600">{{ slot.end_time }}</td>
+                <td class="py-3 px-4">
+                  {% if slot.is_booked %}
+                    <span class="bg-red-100 text-red-800 text-xs px-2.5 py-1 rounded-full">Booked</span>
+                  {% else %}
+                    <span class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full">Available</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-gray-600">No availability slots added yet.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Booked Appointments Section -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
+        <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">🩺</span>
+        Your Booked Appointments
+      </h2>
+      {% if booked_appointments %}
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse">
+            <thead>
+              <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
+                <th class="py-3 px-4 rounded-l-lg">Appointment Time</th>
+                <th class="py-3 px-4">Patient Name</th>
+                <th class="py-3 px-4">Patient Email</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 rounded-r-lg">Actions</th> <!-- Updated header text -->
+              </tr>
+            </thead>
+            <tbody>
+              {% for appt in booked_appointments %}
+              <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
+                <td class="py-3 px-4 font-medium text-gray-800">{{ appt.appointment_time[:16] }}</td> <!-- Format as YYYY-MM-DD HH:MM -->
+                <td class="py-3 px-4">
+                  <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full">
+                    {{ patient_details[appt.user_id].name if patient_details[appt.user_id] else 'Unknown' }}
+                  </span>
+                </td>
+                <td class="py-3 px-4 text-gray-600">{{ patient_details[appt.user_id].email if patient_details[appt.user_id] else 'N/A' }}</td>
+                <td class="py-3 px-4">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2.5 py-1 rounded-full">
+                    {{ appt.status | title }}
+                  </span>
+                </td>
+                <td class="py-3 px-4">
+                  <!-- NEW: Join Meeting Button -->
+                  {% if appt.meeting_url %}
+                    <!-- Example: Show button if appointment is within 30 mins of start time -->
+                    {% set appt_time = appt.appointment_time | datetime_from_iso %}
+                    {% set now = now() %}
+                    {% if now >= appt_time and now <= appt_time + timedelta(minutes=30) %}
+                        <a href="{{ appt.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
+                    {% else %}
+                        <!-- Optionally, show a countdown or just the link -->
+                        <!-- For now, just show the link text if not within the window -->
+                        Meeting Link Ready
+                    {% endif %}
+                  {% else %}
+                    <span class="text-gray-400 text-sm">N/A</span>
+                  {% endif %}
+                  <!-- Example action: view details or update status (placed after meeting link) -->
+                  <!-- <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm ml-2">View Details</a> -->
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-gray-600">You have no booked appointments scheduled.</p>
+        </div>
+      {% endif %}
+    </div>
   </div>
-</div>
+</section>
 
 <!-- Script for Jinja2 filters (if not available server-side) -->
 <script>
