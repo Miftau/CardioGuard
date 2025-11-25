@@ -79,7 +79,7 @@
                             <p class="text-sm">{{ msg.content }}</p>
                         </div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
-                            {{ msg.created_at|datetime_from_iso|default(now(), true)|strftime('%H:%M') }}
+                            {{ msg.created_at|datetime_from_iso|default(now(), true) }}
                         </div>
                     </div>
                 </div>
