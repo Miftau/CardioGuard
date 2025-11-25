@@ -183,8 +183,7 @@ if RAG_MODULES_AVAILABLE and OPENAI_AVAILABLE:
             with open(kb_path, "r", encoding="utf-8") as f:
                 kb_text = f.read()
             # Simple chunking by double newline
-            kb_chunks = [c.strip() for c in kb_text.split("
-") if c.strip()]
+            kb_chunks = [c.strip() for c in kb_text.split("\n\n") if c.strip()]
             if kb_chunks:
                 # Generate embeddings
                 print(f"   - Generating embeddings for {len(kb_chunks)} chunks...")
@@ -997,9 +996,9 @@ def contact():
             msg = Message(
                 subject=f"[CardioGuard] {subject or 'New Message'} from {name}",
                 recipients=[os.getenv("MAIL_DEFAULT_RECEIVER")],
-                body=f"Name: {name}
+                body=f"""Name: {name}
 Email: {email}
-{message}"
+Message: {message}"""
             )
             mail.send(msg)
             flash("✅ Message sent successfully!", "success")
@@ -1400,9 +1399,9 @@ def ai_chat():
         data = response.json()
         ai_reply = data["choices"][0]["message"]["content"]
         # Basic logging (could log to DB instead)
-        print(f"[CHAT LOG] User: {user_input}
+        print(f"""[CHAT LOG] User: {user_input}
 AI: {ai_reply}
----")
+---""")
         return jsonify({"reply": ai_reply})
     except Exception as e:
         print(f"Error: {e}")
