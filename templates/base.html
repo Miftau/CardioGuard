@@ -229,11 +229,6 @@
 </head>
 
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
-    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
-    {% set user = current_user %}
-    {% else %}
-        {% set user = none %}
-    {% endif %}
 
         <!-- ==================== NAVBAR (Improved & Fully Responsive) ==================== -->
         <nav class="bg-white dark:bg-gray-800 shadow-lg py-4 sticky top-0 z-50 transition-all duration-300">
