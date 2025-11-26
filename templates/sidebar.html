@@ -141,7 +141,7 @@
 
   // Optional: Load notifications via AJAX (example)
   document.addEventListener('DOMContentLoaded', () => {
-    fetch('{{ url_for("get_notifications") }}')
+    fetch('{{ url_for("get_notification_count") }}')
       .then(r => r.json())
       .then(data => {
         const list = document.getElementById('notification-list');
