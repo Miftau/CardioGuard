@@ -404,8 +404,13 @@
             </div>
         </nav>
 
-    <div class="flex-1 flex flex-col min-h-screen">
-            {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+
+ <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
+    <!-- Use a flex container to manage sidebar and main content -->
+    <div class="flex flex-1 flex-col md:flex-row"> <!-- Use flex on smaller screens, row on md+ -->
+        <!-- Sidebar will be included conditionally in dashboard templates -->
+        <!-- The sidebar template (_sidebar.html) should have the class 'sidebar' -->
+        {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
                 <div x-data="{ open: false, hover: false }"
                     @click.outside="open = false"
                     class="relative">
@@ -570,15 +575,14 @@
                 }
                 </script>
             {% endif %}
-    </div>
-
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
-        <main class="flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
+        <main class="main-content-area flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
             <div data-aos="fade-up">
                 {% block content %}{% endblock %}
             </div>
         </main>
+    </div>
 
         <!-- Footer -->
         <footer class="bg-gray-900 text-gray-300 mt-auto">
