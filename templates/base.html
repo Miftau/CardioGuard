@@ -229,6 +229,11 @@
 </head>
 
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+    {% set user = current_user %}
+    {% else %}
+        {% set user = none %}
+    {% endif %}
 
         <!-- ==================== NAVBAR (Improved & Fully Responsive) ==================== -->
         <nav class="bg-white dark:bg-gray-800 shadow-lg py-4 sticky top-0 z-50 transition-all duration-300">
@@ -284,12 +289,12 @@
                             <a href="{{ url_for('user_dashboard') }}"
                             class="relative group">
                                 <div class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800 transition-all group-hover:ring-red-600">
-                                    {% if users and users.profile_picture_url %}
-                                        <img src="{{ users.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
+                                    {% if user and user.profile_picture_url %}
+                                        <img src="{{ user.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
                                     {% else %}
                                         <!-- Fallback: Initials or default avatar -->
                                         <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg">
-                                            {{ (users.name or users.email or 'U')[0].upper() }}
+                                            {{ (user.name or user.email or 'U')[0].upper() }}
                                         </div>
                                     {% endif %}
                                 </div>
@@ -328,11 +333,11 @@
                     {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
                         <a href="{{ url_for('user_dashboard') }}" class="block">
                             <div class="w-9 h-9 rounded-full overflow-hidden ring-2 ring-red-500">
-                                {% if users and users.profile_picture_url %}
-                                    <img src="{{ users.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
+                                {% if user and user.profile_picture_url %}
+                                    <img src="{{ user.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
                                 {% else %}
                                     <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold">
-                                        {{ (users.name or users.email or 'U')[0].upper() }}
+                                        {{ (user.name or user.email or 'U')[0].upper() }}
                                     </div>
                                 {% endif %}
                             </div>
