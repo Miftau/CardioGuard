@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block content %}
 {% block sidebar %}
     <!-- Only include the sidebar if a user is logged in -->
     {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
         {% include 'sidebar.html' %}
     {% endif %}
 {% endblock %}
+{% block content %}
 <section class="max-w-4xl mx-auto my-12 px-4">
   <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl shadow-xl overflow-hidden">
     <!-- Header -->
