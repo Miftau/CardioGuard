@@ -1,66 +1,32 @@
 <!-- templates/sidebar.html -->
-<div x-data="{ open: false, hover: false }"
-     @click.outside="open = false"
-     class="relative">
-
-  <!-- Mobile Toggle Button -->
-  <button @click="open = !open"
-          class="fixed left-4 top-4 z-50 lg:hidden p-3 bg-white rounded-lg shadow-lg border border-gray-200">
-    <i class="fas fa-bars text-gray-700 text-xl"></i>
-  </button>
-
-  <!-- Sidebar -->
-  <aside
-    @mouseenter="hover = true"
-    @mouseleave="hover = false"
-    :class="{
-      'translate-x-0 shadow-2xl': open || hover,
-      '-translate-x-full lg:translate-x-0': !(open || hover)
-    }"
-    class="fixed inset-y-0 left-0 z-40 w-64 bg-white transition-all duration-300 ease-in-out
-           lg:static lg:z-auto lg:shadow-none flex flex-col">
-
-    <div class="h-full flex flex-col">
-
-      <!-- Top: Notifications + Messages -->
-      <div class="flex justify-between items-center p-4 border-b border-gray-200">
-        
-        <!-- Notifications Bell - Dynamic Notifications -->
-        <div class="relative" x-data="{ dropdown: false }">
-          <button @click.stop="dropdown = !dropdown"
-                  class="relative text-gray-700 hover:text-red-500 text-2xl transition">
-            <i class="fas fa-bell"></i>
-            {% if notification_count > 0 %}
-              <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
-                {{ notification_count }}
-              </span>
-            {% endif %}
-          </button>
-
-          <!-- Dropdown -->
-          <div x-show="dropdown"
-               x-transition
-               @click.outside="dropdown = false"
-               class="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-            <div class="p-4 border-b font-semibold text-gray-800">Notifications</div>
-            <div id="notification-list" class="max-h-96 overflow-y-auto">
-              <!-- This will be filled via JS (same as your old code) -->
-              Loading notifications...
-            </div>
+<div id="sidebar-container"
+     class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg lg:translate-x-0 lg:static lg:z-auto lg:shadow-none"
+     aria-labelledby="sidebar-label"
+     role="navigation">
+  <div class="h-full flex flex-col">
+    <!-- Top Icons Section -->
+    <div class="flex justify-between p-4 border-b border-gray-200">
+      <!-- Notifications -->
+      <div class="relative" id="notification-bell">
+        <a href="#" class="text-gray-700 hover:text-red-500 text-xl block text-center relative" onclick="toggleDropdown('notif-dropdown'); return false;">
+          <i class="fas fa-bell"></i>
+          <span id="notification-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+        </a>
+        <div id="notif-dropdown" class="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
+          <div class="p-2 text-sm text-gray-700 dark:text-gray-300" id="notification-list">
+            Loading...
           </div>
         </div>
+      </div>
 
-        <!-- Messages - Dynamic Count -->
-        <a href="{{ url_for('messages_page') }}"
-           class="relative text-gray-700 hover:text-red-500 text-2xl transition">
+      <!-- Messages -->
+      <div class="relative" id="message-envelope">
+        <a href="{{ url_for('messages_page') }}" class="text-gray-700 hover:text-red-500 text-xl block text-center relative">
           <i class="fas fa-envelope"></i>
-          {% if unread_message_count > 0 %}
-            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
-              {{ unread_message_count }}
-            </span>
-          {% endif %}
+          <span id="message-count-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
         </a>
       </div>
+    </div>
 
       <!-- Navigation Links -->
       <nav class="flex-flex flex-1 py-4 px-3 overflow-y-auto>
