@@ -229,98 +229,165 @@
 </head>
 
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
-    <!-- ==================== SIDEBAR (for logged-in users only) ==================== -->
-    
 
-    <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
-    <!-- Add left margin/padding based on whether sidebar is present -->
-    <!-- If sidebar block has content, use md:ml-64, otherwise use md:ml-0 -->
-    <div class="flex-1 flex flex-col {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}md:ml-64{% else %}md:ml-0{% endif %}">
-        <!-- ==================== NAVBAR ==================== -->
-        <!-- Ensure the navbar container is relative to the document flow -->
-        <nav class="bg-white shadow-lg py-4 sticky top-0 z-50 transition-all duration-300 sticky-nav">
-            <div class="container mx-auto flex justify-between items-center px-4 sm:px-6">
+        <!-- ==================== NAVBAR (Improved & Fully Responsive) ==================== -->
+        <nav class="bg-white dark:bg-gray-800 shadow-lg py-4 sticky top-0 z-50 transition-all duration-300">
+            <div class="container mx-auto flex justify-between items-center px-4 sm:px-6 lg:px-8">
 
                 <!-- Logo -->
-                <a href="/" class="text-2xl sm:text-4xl font-bold text-red-500 flex items-center">
-                    <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
+                <a href="/" class="text-2xl sm:text-4xl font-bold text-red-500 flex items-center gap-2">
+                    <span class="animate-pulse-heart">❤️</span> CardioGuard
                 </a>
 
-                <!-- Dark-mode toggle -->
-                <button id="dark-mode-toggle"
-                    class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    aria-label="Toggle dark mode">
-                    <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
-                    <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
-                </button>
+                <!-- Desktop Navigation + Right Side (Profile / Auth Buttons) -->
+                <div class="hidden sm:flex items-center space-x-8">
 
-                <!-- Mobile hamburger -->
-                <button id="mobile-menu-toggle" class="sm:hidden text-gray-700 focus:outline-none z-50"
-                    aria-label="Toggle menu">
-                    <i id="menu-icon" class="fas fa-bars text-2xl transition-transform duration-300"></i>
-                </button>
+                    <!-- Main Nav Links (Desktop) -->
+                    <ul class="flex items-center space-x-6 text-gray-700 dark:text-gray-200">
+                        {% macro nav_link(url, label) %}
+                        <li>
+                            <a href="{{ url }}"
+                            class="text-lg font-medium hover:text-red-500 dark:hover:text-red-400 transition {% if request.path == url %}text-red-500 dark:text-red-400 font-bold{% endif %}">
+                                {{ label }}
+                            </a>
+                        </li>
+                        {% endmacro %}
 
-                <!-- Navigation links -->
-                <ul id="mobile-menu"
-                    class="hidden flex-col w-full mt-4 space-y-4 text-gray-700 bg-white absolute top-full left-0 shadow-lg sm:shadow-none sm:flex sm:flex-row sm:space-x-6 sm:w-auto sm:mt-0 sm:space-y-0 sm:bg-transparent sm:static sm:block">
+                        {{ nav_link('/', 'Home') }}
+                        {{ nav_link('/about', 'About') }}
+                        {{ nav_link('/contact', 'Contact') }}
+                        {{ nav_link('/resources', 'Resources') }}
+                        {{ nav_link('/chat', 'CardioAI') }}
+                        {{ nav_link('/form', 'Predict Now') }}
+                    </ul>
 
-                    {% macro nav_item(url, label, is_external=false) %}
-                    <li>
-                        <a href="{{ url }}" {% if is_external %}target="_blank" rel="noopener noreferrer" {% endif %} class="block hover:text-red-500 text-lg sm:text-xl transition-all duration-300 px-4 py-2 sm:p-0
-                          {% if request.path == url %}nav-active{% endif %}">
-                            {{ label }}
-                        </a>
-                    </li>
-                    {% endmacro %}
+                    <!-- Right Side: External Apps + Auth/Profile -->
+                    <div class="flex items-center space-x-4">
 
-                    {{ nav_item('/', 'Home') }}
-                    {{ nav_item('/about', 'About') }}
-                    {{ nav_item('/contact', 'Contact') }}
-                    {{ nav_item('/resources', 'Resources') }}
-                    {{ nav_item('/chat', 'CardioAI') }}
-                    {{ nav_item('https://renalguard.onrender.com', 'RenalGuard', is_external=true) }}
-                    {{ nav_item('https://hepaguard.onrender.com', 'HepaGuard', is_external=true) }}
-
-                    <li>
-                        <a href="/form" class="block bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0
-                        {% if request.path == '/form' %}nav-active bg-red-600{% endif %}">
-                            Predict Now
-                        </a>
-                    </li>
-
-                      <!-- Login / Logout / Profile Icon -->
-                {% if session.get('user_id') %}
-                <!-- Profile Icon Dropdown (for logged-in users) -->
-                <div class="relative" id="profile-dropdown">
-                    <a href="#" class="text-gray-700 hover:text-red-500 text-xl d-block text-center relative" onclick="toggleDropdown('profile-menu'); return false;">
-                        <i class="fas fa-user-circle"></i> <!-- Or fa-user, fa-user-alt, etc. -->
-                        <!-- Optional: Add a small badge or indicator if needed -->
-                    </a>
-                    <div id="profile-menu" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-lg hidden z-50">
-                        <div class="py-1">
-                            <!-- Dashboard Link based on role -->
-                            {% if session.get('role') == 'admin' %}
-                                <a href="{{ url_for('admin_dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Admin Dashboard</a>
-                            {% elif session.get('role') == 'doctor' %}
-                                <a href="{{ url_for('doctor_dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Doctor Dashboard</a>
-                            {% else %} <!-- Default to user dashboard -->
-                                <a href="{{ url_for('user_dashboard') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">User Dashboard</a>
-                            {% endif %}
-                            <a href="{{ url_for('edit_profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Edit Profile</a>
-                            <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-500 dark:hover:bg-gray-700">Logout</a>
+                        <!-- External Apps (small icons on desktop) -->
+                        <div class="flex space-x-3 text-gray-600 dark:text-gray-400">
+                            <a href="https://renalguard.onrender.com" target="_blank" title="RenalGuard"
+                            class="text-xl hover:text-green-500 transition">Kidney</a>
+                            <a href="https://hepaguard.onrender.com" target="_blank" title="HepaGuard"
+                            class="text-xl hover:text-yellow-600 transition">Liver</a>
                         </div>
+
+                        <!-- Dark Mode Toggle -->
+                        <button id="dark-mode-toggle"
+                                class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                            <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
+                            <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
+                        </button>
+
+                        <!-- Logged In: Profile Avatar -->
+                        {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+                            <a href="{{ url_for('user_dashboard') }}"
+                            class="relative group">
+                                <div class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800 transition-all group-hover:ring-red-600">
+                                    {% if current_user and current_user.profile_pic %}
+                                        <img src="{{ current_user.profile_pic }}" alt="Profile" class="w-full h-full object-cover">
+                                    {% else %}
+                                        <!-- Fallback: Initials or default avatar -->
+                                        <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg">
+                                            {{ (current_user.name or current_user.email or 'U')[0].upper() }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <!-- Tooltip -->
+                                <span class="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                                    My Dashboard
+                                </span>
+                            </a>
+
+                            <!-- Logout Button (Desktop) -->
+                            <a href="/logout"
+                            class="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-medium transition">
+                                Logout
+                            </a>
+
+                        {% else %}
+                            <!-- Not Logged In -->
+                            <a href="/login"
+                            class="bg-gradient-to-r from-red-600 to-red-700 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full font-medium transition shadow-lg hover:shadow-xl">
+                                Login
+                            </a>
+                        {% endif %}
                     </div>
                 </div>
-                {% else %}
-                <a href="/login"
-                    class="block bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 hover:shadow-xl transform hover:scale-105 transition-all duration-300 text-md sm:text-lg text-center font-semibold mx-4 sm:mx-0">
-                    Login
-                </a>
-                {% endif %}
+
+                <!-- Mobile: Hamburger + Right Icons -->
+                <div class="flex items-center gap-4 sm:hidden">
+
+                    <!-- Dark Mode (Mobile) -->
+                    <button id="dark-mode-toggle" class="p-2">
+                        <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
+                        <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
+                    </button>
+
+                    <!-- Profile Icon (Mobile - Logged In) -->
+                    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+                        <a href="{{ url_for('user_dashboard') }}" class="block">
+                            <div class="w-9 h-9 rounded-full overflow-hidden ring-2 ring-red-500">
+                                {% if current_user and current_user.profile_pic %}
+                                    <img src="{{ current_user.profile_pic }}" alt="Profile" class="w-full h-full object-cover">
+                                {% else %}
+                                    <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold">
+                                        {{ (current_user.name or current_user.email or 'U')[0].upper() }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </a>
+                    {% endif %}
+
+                    <!-- Hamburger -->
+                    <button id="mobile-menu-toggle"
+                            class="text-gray-700 dark:text-gray-200 focus:outline-none z-50">
+                        <i id="menu-icon" class="fas fa-bars text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile Menu Dropdown -->
+            <div id="mobile-menu"
+                class="sm:hidden absolute top-full left-0 w-full bg-white dark:bg-gray-800 shadow-xl border-t border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300"
+                style="max-height: 0;">
+                <ul class="py-4 px-6 space-y-4 text-lg">
+                    {{ nav_link('/', 'Home') }}
+                    {{ nav_link('/about', 'About') }}
+                    {{ nav_link('/contact', 'Contact') }}
+                    {{ nav_link('/resources', 'Resources') }}
+                    {{ nav_link('/chat', 'CardioAI') }}
+                    {{ nav_link('/form', 'Predict Now') }}
+
+                    <li class="pt-4 border-t border-gray-300 dark:border-gray-600">
+                        <div class="flex gap-4 text-2xl">
+                            <a href="https://renalguard.onrender.com" target="_blank" class="text-green-600">Kidney</a>
+                            <a href="https://hepaguard.onrender.com" target="_blank" class="text-yellow-600">Liver</a>
+                        </div>
+                    </li>
+
+                    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+                        <li>
+                            <a href="{{ url_for('user_dashboard') }}" class="text-red-500 font-semibold flex items-center gap-2">
+                                <i class="fas fa-user-circle"></i> My Dashboard
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/logout" class="block text-center bg-red-600 text-white py-3 rounded-lg font-medium">
+                                Logout
+                            </a>
+                        </li>
+                    {% else %}
+                        <li>
+                            <a href="/login" class="block text-center bg-gradient-to-r from-red-600 to-red-700 hover:bg-red-900 text-white py-3 rounded-lg font-medium">
+                                Login / Register
+                            </a>
+                        </li>
+                    {% endif %}
                 </ul>
             </div>
         </nav>
-        {% block sidebar %}{% endblock %}
+
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
         <main class="flex-1 p-4 sm:p-6"> <!-- Use flex-1 to take remaining space -->
@@ -427,67 +494,83 @@
         </footer>
     </div>
 
-    {% if session.get('user_id') %}
+    <!-- ==================== SCRIPTS ==================== -->
     <script>
-        // Toggle notification dropdown
-        function toggleDropdown(id) {
-            const dropdown = document.getElementById(id);
-            if (dropdown) {
-                dropdown.classList.toggle('hidden');
+        // Dark Mode Toggle
+        document.addEventListener('DOMContentLoaded', () => {
+            const html = document.documentElement;
+            const toggle = document.getElementById('dark-mode-toggle');
+            const sun = document.getElementById('dark-mode-sun');
+            const moon = document.getElementById('dark-mode-moon');
+
+            const saved = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (saved === 'dark' || (!saved && prefersDark)) {
+                html.classList.add('dark');
+                sun.classList.add('hidden');
+                moon.classList.remove('hidden');
             }
+
+            toggle.addEventListener('click', () => {
+                html.classList.toggle('dark');
+                const isDark = html.classList.contains('dark');
+                localStorage.setItem('darkMode', isDark ? 'dark' : 'light');
+                sun.classList.toggle('hidden', isDark);
+                moon.classList.toggle('hidden', !isDark);
+            });
+
+            // Mobile Menu
+            const menu = document.getElementById('mobile-menu');
+            const btn = document.getElementById('mobile-menu-toggle');
+            const icon = document.getElementById('menu-icon');
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const expanded = menu.style.maxHeight && menu.style.maxHeight !== '0px';
+                menu.style.maxHeight = expanded ? '0px' : menu.scrollHeight + 'px';
+                icon.classList.toggle('fa-bars', expanded);
+                icon.classList.toggle('fa-times', !expanded);
+            });
+
+            // Close menu when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!menu.contains(e.target) && !btn.contains(e.target)) {
+                    menu.style.maxHeight = '0px';
+                    icon.classList.replace('fa-times', 'fa-bars');
+                }
+            });
+
+            AOS.init({ once: true, duration: 800 });
+        });
+    </script>
+
+    <!-- Dynamic Notifications & Messages (Only for logged-in users) -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+    <script>
+        function toggleDropdown(id) {
+            document.getElementById(id)?.classList.toggle('hidden');
         }
 
-        // Close dropdowns when clicking outside
-        document.addEventListener('click', (e) => {
-            const notif = document.getElementById('notif-dropdown');
-            const bell = document.getElementById('notification-bell');
-            if (notif && !notif.classList.contains('hidden') && !bell.contains(e.target)) {
-                notif.classList.add('hidden');
-            }
-        });
-
-        // Fetch notification & message counts
         async function fetchCounts() {
             try {
-                // Notifications
                 const notifRes = await fetch('/api/notifications/count');
                 const notifData = await notifRes.json();
-                const notifCount = notifData.count or 0;
-                const notifBadge = document.getElementById('notification-count-badge');
-                if (notifCount > 0) {
-                    notifBadge.textContent = Math.min(notifCount, 99); // cap at 99
-                    notifBadge.classList.remove('hidden');
-                } else {
-                    notifBadge.classList.add('hidden');
-                }
+                const badge = document.getElementById('notification-count-badge');
+                if (notifData.count > 0) {
+                    badge.textContent = Math.min(notifData.count, 99);
+                    badge.classList.remove('hidden');
+                } else badge.classList.add('hidden');
 
-                // Populate dropdown list
-                const notifList = document.getElementById('notification-list');
-                if (notifData.notifications && notifData.notifications.length) {
-                    notifList.innerHTML = notifData.notifications.map(n => `
-                        <div class="p-2 border-b border-gray-200 dark:border-gray-700">${n.message or 'New notification'}</div>
-                    `).join('');
-                } else {
-                    notifList.innerHTML = '<div class="p-2 text-gray-500">No new notifications</div>';
-                }
-
-                // Messages
                 const msgRes = await fetch('/api/messages/unread_count');
                 const msgData = await msgRes.json();
-                const msgCount = msgData.count or 0;
                 const msgBadge = document.getElementById('message-count-badge');
-                if (msgCount > 0) {
-                    msgBadge.textContent = Math.min(msgCount, 99);
+                if (msgData.count > 0) {
+                    msgBadge.textContent = Math.min(msgData.count, 99);
                     msgBadge.classList.remove('hidden');
-                } else {
-                    msgBadge.classList.add('hidden');
-                }
-            } catch (err) {
-                console.warn("Failed to fetch notification/message counts:", err);
-            }
+                } else msgBadge.classList.add('hidden');
+            } catch (e) { console.warn('Notification fetch failed', e); }
         }
 
-        // Initial load + poll every 30 seconds
         document.addEventListener('DOMContentLoaded', () => {
             fetchCounts();
             setInterval(fetchCounts, 30000);
@@ -495,64 +578,15 @@
     </script>
     {% endif %}
 
-    <!-- Script for Sidebar Toggle (Optional, for future use) -->
+    <!-- Delete Account Confirmation -->
     <script>
-        // If you want to add toggle functionality later, uncomment this section
-        /*
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar-container');
-            const isOpen = !sidebar.classList.contains('-translate-x-full');
-
-            if (isOpen) {
-                // Close sidebar
-                sidebar.classList.add('-translate-x-full');
-            } else {
-                // Open sidebar
-                sidebar.classList.remove('-translate-x-full');
-            }
-        }
-
-        // Attach event listener to the open toggle button (you'll need to add this button in your main template, e.g., base.html)
-        // Example: document.getElementById('sidebar-toggle-open').addEventListener('click', toggleSidebar);
-
-        // Attach event listener to the close toggle button (inside the sidebar)
-        document.getElementById('sidebar-toggle-close').addEventListener('click', toggleSidebar);
-
-        // Attach event listener to the overlay to close the sidebar when clicked
-        document.getElementById('sidebar-overlay').addEventListener('click', toggleSidebar);
-        */
-
         function confirmDelete() {
-            if (confirm("Are you sure you want to delete your account permanently? This action cannot be undone.")) {
-                // Submit a POST request to the delete endpoint
-                fetch('/user/account/delete', {
-                    method: 'POST',
-                    credentials: 'same-origin', // Include session cookies
-                    headers: {
-                        'Content-Type': 'application/json',
-                        // Include CSRF token if you use one
-                        // 'X-CSRFToken': getCookie('csrftoken') // Example CSRF token
-                    },
-                })
-                .then(response => {
-                    if (response.ok) {
-                        // Redirect to index or login after successful deletion
-                        window.location.href = "{{ url_for('index') }}";
-                    } else {
-                        alert("Failed to delete account. Please try again.");
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert("An error occurred. Please try again.");
-                });
+            if (confirm("Are you sure you want to permanently delete your account? This cannot be undone.")) {
+                fetch('/user/account/delete', { method: 'POST', credentials: 'same-origin' })
+                    .then(r => r.ok ? location.href = '/' : alert('Failed to delete account'))
+                    .catch(() => alert('Error occurred'));
             }
         }
-
-        // Helper function to get CSRF token from cookie (if applicable)
-        // function getCookie(name) { ... }
     </script>
-
 </body>
-
 </html>
