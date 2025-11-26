@@ -52,7 +52,12 @@
   .map-container:hover iframe { transform: scale(1.03); }
 </style>
 {% endblock %}
-
+{% block sidebar %}
+    <!-- Only include the sidebar if a user is logged in -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+        {% include 'sidebar.html' %}
+    {% endif %}
+{% endblock %}
 {% block content %}
 <!-- Hero Section -->
 <section class="bg-gradient-to-r from-red-50 to-white py-16 border-b">

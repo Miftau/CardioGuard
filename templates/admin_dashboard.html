@@ -2,7 +2,12 @@
 {% extends "base.html" %}
 
 {% block title %}Admin Dashboard{% endblock %}
-
+{% block sidebar %}
+    <!-- Only include the sidebar if a user is logged in -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+        {% include 'sidebar.html' %}
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <section class="py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">

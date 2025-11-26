@@ -1,4 +1,10 @@
 {% extends "base.html" %}
+{% block sidebar %}
+    <!-- Only include the sidebar if a user is logged in -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+        {% include 'sidebar.html' %}
+    {% endif %}
+{% endblock %}
 {% block content %}
 <!-- Confirmation Section -->
 <section class="py-16 md:py-24 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen flex items-center justify-center">
