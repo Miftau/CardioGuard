@@ -286,23 +286,17 @@
 
                         <!-- Logged In: Profile Avatar -->
                         {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
-                            <a href="{{ url_for('user_dashboard') }}"
-                            class="relative group">
-                                <div class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800 transition-all group-hover:ring-red-600">
-                                    {% if user and user.profile_picture_url %}
-                                        <img src="{{ user.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
-                                    {% else %}
-                                        <!-- Fallback: Initials or default avatar -->
-                                        <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg">
-                                            {{ (user.name or user.email or 'U')[0].upper() }}
-                                        </div>
-                                    {% endif %}
+                            <a href="{{ url_for('user_dashboard') }}">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white text-lg shadow-md">
+                                    <i class="fas fa-user"></i>
                                 </div>
-                                <!-- Tooltip -->
-                                <span class="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-                                    My Dashboard
-                                </span>
                             </a>
+                        </div>
+                                <!-- Tooltip -->
+                            <span class="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+                                    My Dashboard
+                            </span>
+                        </a>
 
                             <!-- Logout Button (Desktop) -->
                             <a href="/logout"
@@ -331,15 +325,9 @@
 
                     <!-- Profile Icon (Mobile - Logged In) -->
                     {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
-                        <a href="{{ url_for('user_dashboard') }}" class="block">
-                            <div class="w-9 h-9 rounded-full overflow-hidden ring-2 ring-red-500">
-                                {% if user and user.profile_picture_url %}
-                                    <img src="{{ user.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
-                                {% else %}
-                                    <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold">
-                                        {{ (user.name or user.email or 'U')[0].upper() }}
-                                    </div>
-                                {% endif %}
+                        <a href="{{ url_for('user_dashboard') }}">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white text-lg shadow-md">
+                                <i class="fas fa-user"></i>
                             </div>
                         </a>
                     {% endif %}
