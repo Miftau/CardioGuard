@@ -2,6 +2,174 @@
 
 {% block title %}Messages{% endblock %}
 
+{% block sidebar %}
+  {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+    <div x-data="{ open: false, hover: false }"
+         @click.outside="open = false"
+         class="relative">
+
+      <!-- Mobile Toggle Button -->
+      <button @click="open = !open"
+              class="fixed left-4 top-4 z-50 lg:hidden p-3 bg-white rounded-lg shadow-lg border border-gray-200">
+        <i class="fas fa-bars text-gray-700 text-xl"></i>
+      </button>
+
+      <!-- Sidebar -->
+      <aside
+        @mouseenter="hover = true"
+        @mouseleave="hover = false"
+        :class="{
+          'translate-x-0 shadow-2xl': open || hover,
+          '-translate-x-full lg:translate-x-0': !(open || hover)
+        }"
+        class="fixed inset-y-0 left-0 z-40 w-64 bg-white transition-all duration-300 ease-in-out
+               lg:static lg:z-auto lg:shadow-none flex flex-col">
+
+        <div class="h-full flex flex-col">
+
+          <!-- Top: Notifications + Messages -->
+          <div class="flex justify-between items-center p-4 border-b border-gray-200">
+            
+            <!-- Notifications Bell -->
+            <div class="relative" x-data="{ dropdown: false }">
+              <button @click.stop="dropdown = !dropdown"
+                      class="relative text-gray-700 hover:text-red-500 text-2xl transition">
+                <i class="fas fa-bell"></i>
+                {% if notification_count > 0 %}
+                  <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                    {{ notification_count }}
+                  </span>
+                {% endif %}
+              </button>
+
+              <!-- Dropdown -->
+              <div x-show="dropdown"
+                   x-transition
+                   @click.outside="dropdown = false"
+                   class="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+                <div class="p-4 border-b font-semibold text-gray-800">Notifications</div>
+                <div id="notification-list" class="max-h-96 overflow-y-auto">
+                  Loading notifications...
+                </div>
+              </div>
+            </div>
+
+            <!-- Messages -->
+            <a href="{{ url_for('messages_page') }}"
+               class="relative text-gray-700 hover:text-red-500 text-2xl transition">
+              <i class="fas fa-envelope"></i>
+              {% if unread_message_count > 0 %}
+                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                  {{ unread_message_count }}
+                </span>
+              {% endif %}
+            </a>
+          </div>
+
+          <!-- Navigation Links -->
+          <nav class="flex flex-col flex-1 py-4 px-3 overflow-y-auto">
+            <ul class="space-y-1">
+              <li>
+                <a href="{{ url_for('user_dashboard') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-home w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">Dashboard</span>
+                </a>
+              </li>
+              <li>
+                <a href="{{ url_for('edit_profile') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-user w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">Edit Profile</span>
+                </a>
+              </li>
+              <li>
+                <a href="{{ url_for('pricing') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-credit-card w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">Subscription</span>
+                </a>
+              </li>
+              <li>
+                <a href="{{ url_for('my_bookings') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-calendar w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">My Bookings</span>
+                </a>
+              </li>
+              <li>
+                <a href="{{ url_for('messages_page') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-envelope w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">Messages</span>
+                </a>
+              </li>
+              <li>
+                <a href="{{ url_for('form') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-file-medical w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">Health Prediction</span>
+                </a>
+              </li>
+              <li>
+                <a href="{{ url_for('chat') }}"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+                  <i class="fas fa-robot w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
+                  <span class="ml-3 font-medium">AI Consultation</span>
+                </a>
+              </li>
+              <li class="pt-6 border-t border-gray-200 mt-6">
+                <a href="#" onclick="confirmDelete(); return false;"
+                   class="flex items-center rounded-lg px-3 py-2.5 text-red-600 hover:bg-red-50 transition group">
+                  <i class="fas fa-trash w-8 text-center"></i>
+                  <span class="ml-3 font-medium">Delete Account</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </aside>
+
+      <!-- Mobile Overlay -->
+      <div x-show="open"
+           @click="open = false"
+           class="fixed inset-0 bg-black bg-opacity-40 z-30 lg:hidden transition-opacity duration-300"
+           :class="{ 'opacity-100': open, 'opacity-0 pointer-events-none': !open }"></div>
+    </div>
+
+    <!-- Notification Loading Script -->
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        fetch('{{ url_for("get_notifications") }}')
+          .then(r => r.json())
+          .then(data => {
+            const list = document.getElementById('notification-list');
+            if (data.notifications.length === 0) {
+              list.innerHTML = '<p class="p-4 text-center text-gray-500">No new notifications</p>';
+            } else {
+              list.innerHTML = data.notifications.map(n => `
+                <div class="p-3 hover:bg-gray-50 border-b">
+                  <p class="font-medium text-sm">${n.title}</p>
+                  <p class="text-xs text-gray-600 mt-1">${n.message}</p>
+                </div>
+              `).join('');
+            }
+          })
+          .catch(() => {
+            document.getElementById('notification-list').innerHTML = 
+              '<p class="p-4 text-center text-gray-500">Failed to load notifications</p>';
+          });
+      });
+
+      function confirmDelete() {
+        if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+          window.location.href = "{{ url_for('delete_account') }}";
+        }
+      }
+    </script>
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="flex flex-col md:flex-row gap-6 h-full">
     <!-- Conversations Sidebar -->
