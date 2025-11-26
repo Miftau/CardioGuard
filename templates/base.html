@@ -284,12 +284,12 @@
                             <a href="{{ url_for('user_dashboard') }}"
                             class="relative group">
                                 <div class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-red-500 ring-offset-2 dark:ring-offset-gray-800 transition-all group-hover:ring-red-600">
-                                    {% if current_user and current_user.profile_pic %}
-                                        <img src="{{ current_user.profile_pic }}" alt="Profile" class="w-full h-full object-cover">
+                                    {% if users and users.profile_picture_url %}
+                                        <img src="{{ users.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
                                     {% else %}
                                         <!-- Fallback: Initials or default avatar -->
                                         <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg">
-                                            {{ (current_user.name or current_user.email or 'U')[0].upper() }}
+                                            {{ (users.name or users.email or 'U')[0].upper() }}
                                         </div>
                                     {% endif %}
                                 </div>
@@ -328,11 +328,11 @@
                     {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
                         <a href="{{ url_for('user_dashboard') }}" class="block">
                             <div class="w-9 h-9 rounded-full overflow-hidden ring-2 ring-red-500">
-                                {% if current_user and current_user.profile_pic %}
-                                    <img src="{{ current_user.profile_pic }}" alt="Profile" class="w-full h-full object-cover">
+                                {% if users and users.profile_picture_url %}
+                                    <img src="{{ users.profile_picture_url }}" alt="Profile" class="w-full h-full object-cover">
                                 {% else %}
                                     <div class="w-full h-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white font-bold">
-                                        {{ (current_user.name or current_user.email or 'U')[0].upper() }}
+                                        {{ (users.name or users.email or 'U')[0].upper() }}
                                     </div>
                                 {% endif %}
                             </div>

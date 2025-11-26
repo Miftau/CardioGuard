@@ -1461,7 +1461,7 @@ def doctor_availability():
     return render_template("doctor_availability.html", slots=slots)
 @app.route("/book", methods=["GET", "POST"])
 @login_required
-@check_subscription_access # Apply access control
+#@check_subscription_access # Apply access control
 def book_appointment():
     if session.get("role") != "user":
         flash("Login as a user to book an appointment.", "warning")
