@@ -1508,7 +1508,8 @@ def book_appointment():
     available_slots = supabase.table("doctor_availability").select(
         "id, doctor_id, available_date, start_time, end_time"
     ).eq("is_booked", False).execute().data
-    doctors_data = supabase.table("doctors").select("id, specialization, bio").execute().data
+    # --- UPDATE: Fetch doctor details including rating ---
+    doctors_data = supabase.table("doctors").select("id, specialization, bio, rating").execute().data # Add 'rating' here
     doctor_lookup = {d["id"]: d for d in doctors_data}
     # Build a frontend-friendly JSON object for JavaScript
     formatted_slots = []
@@ -1519,6 +1520,8 @@ def book_appointment():
             "doctor": doctor_lookup.get(s["doctor_id"], {}).get(
                 "specialization", "Unknown"
             ),
+            # --- UPDATE: Include rating in the formatted slot data ---
+            "rating": doctor_lookup.get(s["doctor_id"], {}).get("rating", "No ratings yet"), # Add rating info
             "date": s["available_date"],
             "start": s["start_time"],
             "end": s["end_time"],
@@ -1526,6 +1529,7 @@ def book_appointment():
         for s in available_slots
     )
     return render_template("book_appointment.html", slots=formatted_slots)
+
 @app.route("/my-bookings")
 @login_required
 def my_bookings():
@@ -1537,11 +1541,13 @@ def my_bookings():
     doctor_lookup = {}
     try:
         if doctor_ids := list({a["doctor_id"] for a in appointments}):
-            doctors = supabase.table("doctors").select("id, specialization").in_("id", doctor_ids).execute().data
+            # --- UPDATE: Fetch doctor details including rating ---
+            doctors = supabase.table("doctors").select("id, specialization, rating").in_("id", doctor_ids).execute().data # Add 'rating' here
             doctor_lookup = {d["id"]: d for d in doctors}
     except Exception as e:
         print("Doctor fetch error:", e)
     return render_template("my_bookings.html", appointments=appointments, doctors=doctor_lookup)
+
 # ============================================================
 # Routes - Subscription Management
 # ============================================================
@@ -1636,6 +1642,7 @@ def cancel_subscription(sub_id):
 # ============================================================
 # Routes - Dashboards
 # ============================================================
+
 @app.route("/doctor/dashboard")
 @login_required
 def doctor_dashboard():
@@ -1687,6 +1694,60 @@ def doctor_dashboard():
         booked_appointments=booked_appointments,
         patient_details=patient_details
     )
+    
+    
+  
+@app.route('/rate_doctor/<doctor_id>', methods=['POST'])
+@login_required
+def rate_doctor(doctor_id):
+    if session.get("role") != "user":
+        flash("Only patients can rate doctors.", "warning")
+        return redirect(url_for("user_dashboard")) # Or appropriate redirect
+
+    user_id = session.get("user_id")
+    rating_str = request.form.get("rating")
+    comment = request.form.get("comment", "").strip()
+
+    try:
+        rating = int(rating_str)
+        if not (1 <= rating <= 5):
+            flash("Please provide a valid rating (1–5).", "danger")
+            return redirect(request.referrer or url_for("user_dashboard"))
+    except (ValueError, TypeError):
+        flash("Invalid rating value.", "danger")
+        return redirect(request.referrer or url_for("user_dashboard"))
+
+    try:
+        # --- Fetch Current Rating and Count ---
+        current_doc_res = supabase.table("doctors").select("rating, rating_count").eq("id", doctor_id).single().execute()
+        current_doc = current_doc_res.data
+        current_avg = current_doc.get("rating", 0.0) # Default to 0 if no rating exists yet
+        current_count = current_doc.get("rating_count", 0) # Default to 0
+
+        # --- Calculate New Average ---
+        # Total points before = old_avg * old_count
+        # Total points after = old_points + new_rating
+        # New average = total_points_after / (old_count + 1)
+        old_total_points = current_avg * current_count
+        new_total_points = old_total_points + rating
+        new_count = current_count + 1
+        new_avg = new_total_points / new_count
+
+        # --- Update Doctors Table ---
+        supabase.table("doctors").update({
+            "rating": round(new_avg, 2), # Round to 2 decimal places for display
+            "rating_count": new_count
+        }).eq("id", doctor_id).execute()
+
+        flash("Thank you for your feedback!", "success")
+    except Exception as e:
+        print(f"Rating error: {e}")
+        flash("Failed to submit rating.", "danger")
+
+    # Redirect back to where the user came from (e.g., bookings page)
+    return redirect(request.referrer or url_for("user_dashboard"))
+   
+    
 @app.route("/user/dashboard")
 @login_required
 def user_dashboard():
@@ -1863,63 +1924,145 @@ def log_activity(user_id, plan_id, activity_type):
 # Routes - User Profile & Account Management
 # ============================================================
 
+
+def send_welcome_email_if_incomplete(user_id, email, name, role):
+    """Sends a welcome email if the user's profile is incomplete."""
+    if role != "doctor":
+        return  # Only for doctors
+
+    try:
+        # Fetch doctor-specific details to check completeness
+        doctor_data = supabase.table("doctors").select("bio, specialization, license_number").eq("id", user_id).single().execute().data
+        bio = doctor_data.get("bio", "").strip()
+        spec = doctor_data.get("specialization", "").strip()
+        license_num = doctor_data.get("license_number", "").strip()
+
+        if not bio or not spec or not license_num:
+            msg = Message(
+                subject="[CardioGuard] Welcome! Please Complete Your Profile",
+                recipients=[email],
+                body=f"""
+                Hi {name},
+
+                Welcome to CardioGuard! 🎉
+
+                To start accepting appointments, please complete your professional profile:
+                - Add your specialization
+                - Write a short bio
+                - Provide your license number
+                - Set your consultation fee
+
+                Visit your dashboard to get started:
+                {url_for('doctor_dashboard', _external=True)}
+
+                Best regards,
+                The CardioGuard Team
+                """
+            )
+            mail.send(msg)
+            print(f"✅ Welcome email sent to {email}")
+    except Exception as e:
+        print(f"Failed to check doctor profile completeness or send email: {e}")
+
 @app.route('/user/profile/edit', methods=['GET', 'POST'])
 @login_required
 def edit_profile():
     user_id = session.get("user_id")
-    if not user_id or session.get("role") != "user": # Ensure it's a regular user
+    role = session.get("role")
+
+    # Determine the correct dashboard based on role
+    dashboard_redirect = f"{role}_dashboard" if role in ["user", "doctor", "admin"] else "login"
+
+    if not user_id or role not in ["user", "doctor"]:
         flash("Access denied.", "danger")
-        return redirect(url_for("login")) # Or appropriate dashboard
+        return redirect(url_for("login"))
 
     if request.method == 'POST':
-        # --- Handle Profile Updates ---
-        new_address = request.form.get('address', '').strip()
-        new_picture_url = request.form.get('profile_picture_url', '').strip()
-        # Validate inputs if necessary (e.g., URL format for picture)
-        # Consider adding validation for address length, picture URL format, etc.
+        if role == "user":
+            # --- Handle User Profile Updates ---
+            new_address = request.form.get('address', '').strip()
+            new_picture_url = request.form.get('profile_picture_url', '').strip()
 
-        # --- Handle Privacy Settings ---
-        # Fetch current settings from Supabase
-        current_data_res = supabase.table("users").select("profile_settings").eq("id", user_id).single().execute()
-        current_settings = current_data_res.data.get("profile_settings", {})
-        # Get new privacy settings from form
-        new_address_public = request.form.get('address_public') == 'on' # Checkbox is 'on' if checked
-        new_picture_public = request.form.get('picture_public') == 'on'
+            # --- Handle User Privacy Settings ---
+            current_data_res = supabase.table("users").select("profile_settings").eq("id", user_id).single().execute()
+            current_settings = current_data_res.data.get("profile_settings", {})
+            new_address_public = request.form.get('address_public') == 'on'
+            new_picture_public = request.form.get('picture_public') == 'on'
+            updated_settings = {
+                **current_settings,
+                "address_public": new_address_public,
+                "picture_public": new_picture_public
+            }
 
-        # Update the settings dictionary
-        updated_settings = {**current_settings, "address_public": new_address_public, "picture_public": new_picture_public}
+            try:
+                supabase.table("users").update({
+                    "address": new_address,
+                    "profile_picture_url": new_picture_url,
+                    "profile_settings": updated_settings
+                }).eq("id", user_id).execute()
+                flash("User profile updated successfully!", "success")
+            except Exception as e:
+                print(f"Error updating user profile: {e}")
+                flash("Failed to update profile. Please try again.", "danger")
 
-        try:
-            # Update the user's profile data and settings
-            supabase.table("users").update({
-                "address": new_address,
-                "profile_picture_url": new_picture_url,
-                "profile_settings": updated_settings # Store the updated JSONB object
-            }).eq("id", user_id).execute()
-            flash("Profile updated successfully!", "success")
-        except Exception as e:
-            print(f"Error updating profile: {e}") # Log error
-            flash("Failed to update profile. Please try again.", "danger")
+        elif role == "doctor":
+            # --- Handle Doctor Profile Updates ---
+            name = request.form.get('name', '').strip()
+            bio = request.form.get('bio', '').strip()
+            specialization = request.form.get('specialization', '').strip()
+            consultation_fee_str = request.form.get('consultation_fee', '0')
+            license_number = request.form.get('license_number', '').strip()
+
+            try:
+                consultation_fee = float(consultation_fee_str)
+            except ValueError:
+                consultation_fee = 0.0
+
+            try:
+                # Update user table (name)
+                supabase.table("users").update({"name": name}).eq("id", user_id).execute()
+                # Update doctor table (specialization, bio, fee, license)
+                supabase.table("doctors").update({
+                    "bio": bio,
+                    "specialization": specialization,
+                    "consultation_fee": consultation_fee,
+                    "license_number": license_number,
+                }).eq("id", user_id).execute()
+                flash("Doctor profile updated successfully!", "success")
+
+                # Check if profile is now complete and send welcome email if it was incomplete before
+                send_welcome_email_if_incomplete(user_id, session.get("user_email"), name, role)
+
+            except Exception as e:
+                print(f"Error updating doctor profile: {e}")
+                flash("Failed to update profile. Please try again.", "danger")
+
+        return redirect(url_for(dashboard_redirect)) # Redirect back to the appropriate dashboard after update
 
     # --- GET Request (or after POST redirect) ---
     try:
-        user_data_res = supabase.table("users").select("*").eq("id", user_id).single().execute()
-        user_data = user_data_res.data
-        # Extract settings from the JSONB field
-        profile_settings = user_data.get("profile_settings", {})
-        address_public = profile_settings.get("address_public", False) # Default to False
-        picture_public = profile_settings.get("picture_public", False) # Default to False
+        user_data = supabase.table("users").select("*").eq("id", user_id).single().execute().data
+        session["user_email"] = user_data.get("email") # Ensure email is in session for email helper
 
-        # Pass data to the template
-        return render_template('edit_profile.html',
-                               user=user_data,
-                               address_public=address_public,
-                               picture_public=picture_public)
+        if role == "user":
+            profile_settings = user_data.get("profile_settings", {})
+            address_public = profile_settings.get("address_public", False)
+            picture_public = profile_settings.get("picture_public", False)
+            return render_template('edit_profile.html',
+                                   user=user_data,
+                                   address_public=address_public,
+                                   picture_public=picture_public)
+
+        elif role == "doctor":
+            doctor_data = supabase.table("doctors").select("*").eq("id", user_id).single().execute().data
+            # Combine user and doctor data for the template context
+            profile_info = {**user_data, **doctor_data}
+            return render_template('edit_doctor_profile.html', doctor=profile_info)
+
     except Exception as e:
         print(f"Error fetching profile for edit: {e}")
         flash("Error loading profile data.", "danger")
-        return redirect(url_for("user_dashboard")) # Or another safe redirect
-
+        return redirect(url_for(dashboard_redirect))
 
 @app.route('/user/account/delete', methods=['POST'])
 @login_required

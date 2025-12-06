@@ -1,0 +1,44 @@
+<!-- templates/edit_doctor_profile.html -->
+{% extends "base.html" %}
+
+{% block title %}Doctor Dashboard Update{% endblock %}
+
+{% block sidebar %}
+    <!-- Only include the sidebar if a user is logged in -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+        {% include 'sidebar.html' %}
+    {% endif %}
+{% endblock %}
+{% block content %}
+<section class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-6">Edit Your Doctor Profile</h1>
+        <form method="POST" class="bg-white p-6 rounded-lg shadow-md">
+            <div class="mb-4">
+                <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Name:</label>
+                <input type="text" id="name" name="name" value="{{ doctor.name }}" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label for="specialization" class="block text-gray-700 text-sm font-bold mb-2">Specialization:</label>
+                <input type="text" id="specialization" name="specialization" value="{{ doctor.specialization }}" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label for="bio" class="block text-gray-700 text-sm font-bold mb-2">Bio:</label>
+                <textarea id="bio" name="bio" rows="4" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">{{ doctor.bio }}</textarea>
+            </div>
+            <div class="mb-4">
+                <label for="consultation_fee" class="block text-gray-700 text-sm font-bold mb-2">Consultation Fee:</label>
+                <input type="number" step="0.01" id="consultation_fee" name="consultation_fee" value="{{ doctor.consultation_fee or 0.0 }}" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label for="license_number" class="block text-gray-700 text-sm font-bold mb-2">License Number:</label>
+                <input type="text" id="license_number" name="license_number" value="{{ doctor.license_number }}" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Update Profile
+            </button>
+        </form>
+        <a href="{{ url_for('doctor_dashboard') }}" class="mt-4 inline-block text-blue-500 hover:text-blue-700">Back to Dashboard</a>
+    </div>
+</section>
+{% endblock %}

@@ -1,3 +1,4 @@
+<!-- templates/my_bookings.html -->
 {% extends "base.html" %}
 {% block title %}My Appointments{% endblock %}
 {% block sidebar %}
@@ -40,9 +41,25 @@
               {% for a in appointments %}
               <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
                 <td class="py-3 px-4 font-medium text-gray-800">
-                  <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full">
-                    {{ doctors[a.doctor_id].specialization if doctors[a.doctor_id] else 'Unknown Doctor' }}
-                  </span>
+                  <div>
+                    <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full">
+                      {{ doctors[a.doctor_id].specialization if doctors[a.doctor_id] else 'Unknown Doctor' }}
+                    </span>
+                    <!-- --- NEW: Display Rating --- -->
+                    {% if doctors[a.doctor_id] and doctors[a.doctor_id].rating %}
+                        <div class="flex items-center mt-1">
+                            {% set rating = doctors[a.doctor_id].rating %}
+                            {% for i in range(5) %}
+                                {% if i < (rating | int) %}
+                                    <span class="text-yellow-500">★</span>
+                                {% else %}
+                                    <span class="text-gray-300">☆</span>
+                                {% endif %}
+                            {% endfor %}
+                            <span class="ml-1 text-gray-500 text-xs">({{ rating }})</span>
+                        </div>
+                    {% endif %}
+                  </div>
                 </td>
                 <td class="py-3 px-4 text-gray-600">{{ a.appointment_time[:16] }}</td> <!-- Format as YYYY-MM-DD HH:MM -->
                 <td class="py-3 px-4">

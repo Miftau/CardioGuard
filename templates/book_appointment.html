@@ -1,3 +1,4 @@
+<!-- templates/book_appointment.html -->
 {% extends "base.html" %}
 {% block title %}Book Appointment{% endblock %}
 {% block sidebar %}
@@ -79,7 +80,7 @@
 
 <script>
   // Data passed from the backend
-  const allSlots = {{ slots|tojson }};
+  const allSlots = {{ slots|tojson }}; // This now includes the 'rating' key for each slot
   const container = document.getElementById("doctorsContainer");
   const calendar = document.getElementById("calendarDate");
   const confirmationSection = document.getElementById("confirmationSection");
@@ -121,8 +122,13 @@
       if (!doctors[s.doctor_id]) {
         doctors[s.doctor_id] = {
           doctor: s.doctor,
+          rating: s.rating, // Get the rating from the first slot for this doctor (they should all be the same for a given doctor)
           slots: []
         };
+      }
+      // Ensure rating is consistent across slots for the same doctor, or just use the one from the first slot found
+      if (doctors[s.doctor_id].rating === undefined) {
+          doctors[s.doctor_id].rating = s.rating;
       }
       doctors[s.doctor_id].slots.push(s);
     });
@@ -144,14 +150,41 @@
         </button>
       `).join("");
 
+      // --- NEW: Render Rating Stars ---
+      // Create a function to generate star HTML based on rating
+      function renderStars(rating) {
+          if (!rating || rating === 'No ratings yet') {
+              return '<span class="text-gray-500 text-sm">No ratings yet</span>';
+          }
+          let starsHTML = '<div class="flex items-center mt-1">';
+          const roundedRating = Math.round(rating); // Round the rating to nearest integer for stars
+          for (let i = 1; i <= 5; i++) {
+              if (i <= roundedRating) {
+                  starsHTML += '<span class="text-yellow-500">★</span>';
+              } else {
+                  starsHTML += '<span class="text-gray-300">☆</span>';
+              }
+          }
+          starsHTML += `<span class="ml-2 text-gray-600 text-sm">(${rating})</span>`; // Display the actual rating number
+          starsHTML += '</div>';
+          return starsHTML;
+      }
+
       card.innerHTML = `
-        <div class="flex items-center mb-4">
+        <div class="flex items-start mb-4"> <!-- Changed to items-start for alignment -->
           <div class="w-12 h-12 bg-gradient-to-r from-red-100 to-red-200 text-red-700 rounded-xl flex items-center justify-center font-bold text-lg">
             ${data.doctor[0].toUpperCase()}
           </div>
-          <div class="ml-4">
-            <h3 class="text-lg font-bold text-gray-800">Dr. ${data.doctor}</h3>
-            <p class="text-gray-600 text-sm">Cardiology Specialist</p>
+          <div class="ml-4 flex-1"> <!-- Added flex-1 to allow rating to align right -->
+            <div class="flex justify-between items-start"> <!-- Flex container for name and rating -->
+              <div>
+                <h3 class="text-lg font-bold text-gray-800">Dr. ${data.doctor}</h3>
+                <p class="text-gray-600 text-sm">Cardiology Specialist</p>
+              </div>
+              <div class="text-right"> <!-- Align rating to the right -->
+                ${renderStars(data.rating)}
+              </div>
+            </div>
           </div>
         </div>
         <div class="border-t border-gray-200 pt-4">
