@@ -50,6 +50,10 @@ import pandas as pd
 import numpy as np
 import shap
 import joblib
+from jinja2 import Environment
+from datetime import datetime
+
+
 from functools import wraps # For login_required decorator
 # Optional SDKs — imported inside try/except so app still runs without them
 try:
@@ -96,6 +100,9 @@ app.config.update(
         os.getenv("MAIL_USERNAME")
     ),
 )
+
+app.jinja_env.globals['now'] = datetime.now
+
 mail = Mail(app)
 @app.context_processor
 def inject_now():
