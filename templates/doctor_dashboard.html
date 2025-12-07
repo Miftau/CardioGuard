@@ -192,14 +192,5 @@ function datetimeFromIso(dateString) {
     }
 }
 
-// Example usage within template logic (conceptual, not directly executable here)
-// This logic would typically happen server-side during template rendering.
-// For example, in the template:
-// {% set appt_time = datetimeFromIso(appt.appointment_time) %}
-// {% set now_time = now() %}
-// {% if now_time >= appt_time and now_time <= new Date(appt_time.getTime() + 30 * 60000) %} // 30 minutes in ms
-//     <a href="{{ appt.meeting_url }}">Join Meeting</a>
-// {% endif %}
-
 </script>
 {% endblock %}
