@@ -5,7 +5,7 @@
      role="navigation">
   <div class="h-full flex flex-col">
     <!-- Close button for mobile -->
-    <div class="lg:hidden p-4 flex justify-end mt-12">
+    <div class="lg:hidden p-4 flex justify-end mt-30">
       <button id="sidebar-close" class="text-gray-500 hover:text-gray-700">
         <i class="fas fa-times text-xl"></i>
       </button>
@@ -45,7 +45,7 @@
             {% elif session.get('role') == 'doctor' %}
               {{ url_for('doctor_dashboard') }}
             {% else %}
-              {{ url_for('user_dashboard') }} <!-- Default to user dashboard for 'user' role or if role is missing/unknown -->
+              {{ url_for('user_dashboard') }}
             {% endif %}
           " class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
             <i class="fas fa-home w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
