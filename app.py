@@ -1657,8 +1657,8 @@ def doctor_dashboard():
     if session.get("role") != "doctor":
         flash("Access denied. Doctors only.", "danger")
         return redirect(url_for("login"))
-    user_id = session.get("user_id")
-    doctor_id = session.get("doctor_id") # Assuming this is set during login for doctors
+    user_id = session.get("id")
+    doctor_id = session.get("id") # Assuming this is set during login for doctors
     # If doctor_id isn't in session, fetch it from the doctors table
     if not doctor_id:
         try:
