@@ -266,9 +266,9 @@
 
                         <!-- External Apps (small icons on desktop) -->
                         <div class="flex space-x-3 text-gray-600 dark:text-gray-400">
-                            <a href="https://renalguard.onrender.com" target="_blank" title="RenalGuard"
+                            <a href="https://renalguard.onrender.com  " target="_blank" title="RenalGuard"
                             class="text-xl hover:text-green-500 transition">Kidney</a>
-                            <a href="https://hepaguard.onrender.com" target="_blank" title="HepaGuard"
+                            <a href="https://hepaguard.onrender.com  " target="_blank" title="HepaGuard"
                             class="text-xl hover:text-yellow-600 transition">Liver</a>
                         </div>
 
@@ -279,7 +279,7 @@
                             <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
                         </button>
 
-                        <!-- Determine the dashboard URL based on the session role -->
+                        <!-- Profile Icon (Desktop) - Dynamic Link -->
                         {% if session.get('role') == 'admin' %}
                             {% set dashboard_url = url_for('admin_dashboard') %}
                             {% set tooltip_text = 'Admin Panel' %}
@@ -291,7 +291,7 @@
                             {% set tooltip_text = 'My Dashboard' %}
                         {% else %}
                             {% set dashboard_url = '#' %}
-                            {% set tooltip_text = 'Dashboard' %} <!-- Fallback tooltip -->
+                            {% set tooltip_text = 'Dashboard' %} <!-- Fallback -->
                         {% endif %}
 
                         {% if dashboard_url != '#' %}
@@ -303,17 +303,7 @@
                                     {{ tooltip_text }}
                                 </span>
                             </a>
-                        {% else %}
-                            <!-- Optionally, show a placeholder or a link to login if no role is found -->
-                            <div class="group relative">
-                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white text-lg shadow-lg ring-4 ring-gray-500/30 transition-all">
-                                    <i class="fas fa-user"></i>
-                                </div>
-                                <span class="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap pointer-events-none z-10">
-                                    Login Required
-                                </span>
-                            </div>
-                        {% endif %}
+
 
                             <!-- Logout Button (Desktop) -->
                             <a href="/logout"
@@ -340,15 +330,19 @@
                         <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
                     </button>
 
-                    <!-- Profile Icon (Mobile - Logged In) -->
-                   {% if session.get('user_id') %}
-                        {% set dashboard_url = url_for('user_dashboard') %}
-                    {% elif session.get('doctor_id') %}
-                        {% set dashboard_url = url_for('doctor_dashboard') %}
-                    {% elif session.get('admin_id') %}
+                    <!-- Profile Icon (Mobile - Logged In) - Dynamic Link -->
+                    {% if session.get('role') == 'admin' %}
                         {% set dashboard_url = url_for('admin_dashboard') %}
+                        {% set tooltip_text = 'Admin Panel' %}
+                    {% elif session.get('role') == 'doctor' %}
+                        {% set dashboard_url = url_for('doctor_dashboard') %}
+                        {% set tooltip_text = 'Doctor Panel' %}
+                    {% elif session.get('role') == 'user' %}
+                        {% set dashboard_url = url_for('user_dashboard') %}
+                        {% set tooltip_text = 'My Dashboard' %}
                     {% else %}
                         {% set dashboard_url = '#' %}
+                        {% set tooltip_text = 'Dashboard' %} <!-- Fallback -->
                     {% endif %}
 
                     {% if dashboard_url != '#' %}
@@ -357,11 +351,7 @@
                                 <i class="fas fa-user"></i>
                             </div>
                             <span class="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap pointer-events-none z-10">
-                                {% if session.get('user_id') %}
-                                    My Dashboard
-                                {% elif session.get('doctor_id') %}Doctor Panel
-                                {% elif session.get('admin_id') %}Admin Panel
-                                {% endif %}
+                                {{ tooltip_text }}
                             </span>
                         </a>
                     {% endif %}
@@ -388,14 +378,22 @@
 
                     <li class="pt-4 border-t border-gray-300 dark:border-gray-600">
                         <div class="flex gap-4 text-2xl">
-                            <a href="https://renalguard.onrender.com" target="_blank" class="text-green-600">Kidney</a>
-                            <a href="https://hepaguard.onrender.com" target="_blank" class="text-yellow-600">Liver</a>
+                            <a href="https://renalguard.onrender.com  " target="_blank" class="text-green-600">Kidney</a>
+                            <a href="https://hepaguard.onrender.com  " target="_blank" class="text-yellow-600">Liver</a>
                         </div>
                     </li>
 
-                    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+                    {% if session.get('role') %}
+                        <!-- Dynamic Dashboard Link in Mobile Menu -->
+                        {% if session.get('role') == 'admin' %}
+                            {% set mobile_dashboard_url = url_for('admin_dashboard') %}
+                        {% elif session.get('role') == 'doctor' %}
+                            {% set mobile_dashboard_url = url_for('doctor_dashboard') %}
+                        {% elif session.get('role') == 'user' %}
+                            {% set mobile_dashboard_url = url_for('user_dashboard') %}
+                        {% endif %}
                         <li>
-                            <a href="{{ url_for('user_dashboard') }}" class="text-red-500 font-semibold flex items-center gap-2">
+                            <a href="{{ mobile_dashboard_url }}" class="text-red-500 font-semibold flex items-center gap-2">
                                 <i class="fas fa-user-circle"></i> My Dashboard
                             </a>
                         </li>
