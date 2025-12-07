@@ -1441,7 +1441,7 @@ def doctor_availability():
         return redirect(url_for("login"))
     user_id = session.get("user_id")
     # find doctor record
-    doctor_data = supabase.table("doctors").select("id").eq("user_id", user_id).single().execute()
+    doctor_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
     if not doctor_data.data:
         flash("Doctor profile not found.", "danger")
         return redirect(url_for("doctor_dashboard"))
@@ -1466,6 +1466,8 @@ def doctor_availability():
     # GET request
     slots = supabase.table("doctor_availability").select("*").eq("doctor_id", doctor_id).order("available_date").execute().data
     return render_template("doctor_availability.html", slots=slots)
+
+
 @app.route("/book", methods=["GET", "POST"])
 @login_required
 #@check_subscription_access # Apply access control
