@@ -39,7 +39,15 @@
     <nav class="flex flex-col flex-1 py-4 px-3 overflow-y-auto">
       <ul class="space-y-1">
         <li>
-          <a href="{{ url_for('user_dashboard') }}" class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
+          <a href="
+            {% if session.get('role') == 'admin' %}
+              {{ url_for('admin_dashboard') }}
+            {% elif session.get('role') == 'doctor' %}
+              {{ url_for('doctor_dashboard') }}
+            {% else %}
+              {{ url_for('user_dashboard') }} <!-- Default to user dashboard for 'user' role or if role is missing/unknown -->
+            {% endif %}
+          " class="flex items-center rounded-lg px-3 py-2.5 text-gray-700 hover:bg-gray-100 transition group">
             <i class="fas fa-home w-8 text-center text-gray-600 group-hover:text-gray-900"></i>
             <span class="ml-3 font-medium">Dashboard</span>
           </a>
