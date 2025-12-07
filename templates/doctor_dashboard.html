@@ -131,12 +131,15 @@
                 </td>
                 <td class="py-3 px-4">
                   <!-- NEW: Join Meeting Button -->
-                  {% if appt.meeting_url %}
+                                    <!-- NEW: Join Meeting Button -->
+                  {% if a.meeting_url %}
                     <!-- Example: Show button if appointment is within 30 mins of start time -->
-                    {% set appt_time = appt.appointment_time | datetime_from_iso %}
+                    {% set appt_time = a.appointment_time | datetime_from_iso %}
                     {% set now = now() %}
-                    {% if now >= appt_time and now <= appt_time + timedelta(minutes=30) %}
-                        <a href="{{ appt.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
+                    <!-- NEW: Convert now() to timezone-aware UTC to match appt_time -->
+                    {% set now_aware = now.replace(tzinfo=appt_time.tzinfo) %}
+                    {% if now_aware >= appt_time and now_aware <= appt_time + timedelta(minutes=30) %}
+                        <a href="{{ a.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
                     {% else %}
                         <!-- Optionally, show a countdown or just the link -->
                         <!-- For now, just show the link text if not within the window -->
