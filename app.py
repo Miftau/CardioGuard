@@ -853,7 +853,7 @@ def register():
                 user_id = new_user.get("id") if new_user else None
                 if user_id:
                     supabase.table("doctors").insert({
-                        "user_id": user_id,
+                        "id": user_id,
                         "specialization": request.form.get("specialization", "General Cardiology"),
                         "bio": request.form.get("bio", ""),
                         "consultation_fee": float(request.form.get("consultation_fee", 0))
