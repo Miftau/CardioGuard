@@ -1666,6 +1666,159 @@ def my_bookings():
         print("Doctor fetch error:", e)
     return render_template("my_bookings.html", appointments=appointments, doctors=doctor_lookup)
 
+@app.route("/appointment/cancel/<appointment_id>", methods=["POST"])
+@login_required
+def cancel_appointment(appointment_id):
+    user_id = session.get("user_id")
+    if not user_id or session.get("role") != "user":
+        flash("Access denied.", "danger")
+        return redirect(url_for("user_dashboard"))
+
+    try:
+        # Fetch the appointment to check if it belongs to the user and is cancellable
+        appointment_data = supabase.table("appointments").select("*").eq("id", appointment_id).eq("user_id", user_id).single().execute()
+        appointment = appointment_data.data
+
+        if not appointment:
+            flash("Appointment not found or does not belong to you.", "danger")
+            return redirect(url_for("my_bookings")) # Or user_dashboard
+
+        # Check if status allows cancellation (e.g., not already cancelled or completed)
+        if appointment.get("status") in ["cancelled", "completed"]:
+            flash("This appointment cannot be cancelled.", "warning")
+            return redirect(url_for("my_bookings")) # Or user_dashboard
+
+        # Update the appointment status to cancelled
+        supabase.table("appointments").update({"status": "cancelled"}).eq("id", appointment_id).execute()
+
+        # Optional: If the original slot was marked as booked, you might want to un-mark it.
+        # However, if slots are time-ranges calculated from weekly availability, this is less relevant.
+        # If slots were fixed and is_booked was a flag, you might do:
+        # supabase.table("doctor_availability").update({"is_booked": False}).eq("id", appointment.get("slot_id")).execute()
+        # But with the new system, the slot availability is recalculated, so just changing status is enough.
+
+        flash("Appointment cancelled successfully.", "success")
+    except Exception as e:
+        print(f"Error cancelling appointment: {e}")
+        flash("Failed to cancel appointment. Please try again.", "danger")
+
+    # Redirect back to where the user came from (e.g., user dashboard or my bookings)
+    return redirect(request.referrer or url_for("user_dashboard"))
+
+@app.route("/appointment/reschedule/<appointment_id>", methods=["GET", "POST"])
+@login_required
+def reschedule_appointment(appointment_id):
+    user_id = session.get("user_id")
+    if not user_id or session.get("role") != "user":
+        flash("Access denied.", "danger")
+        return redirect(url_for("user_dashboard"))
+
+    # Fetch the existing appointment
+    try:
+        appointment_data = supabase.table("appointments").select("*").eq("id", appointment_id).eq("user_id", user_id).single().execute()
+        appointment = appointment_data.data
+        if not appointment:
+            flash("Appointment not found or does not belong to you.", "danger")
+            return redirect(url_for("my_bookings"))
+        if appointment.get("status") != "pending":
+            flash("Only pending appointments can be rescheduled.", "warning")
+            return redirect(url_for("my_bookings"))
+    except Exception as e:
+        print(f"Error fetching appointment for rescheduling: {e}")
+        flash("Failed to fetch appointment details.", "danger")
+        return redirect(url_for("my_bookings"))
+
+    if request.method == "POST":
+        # Handle the rescheduling
+        new_slot_time_key = request.form.get("new_slot_time_key")
+        if not new_slot_time_key:
+            flash("Please select a new time slot.", "danger")
+            return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
+
+        try:
+            # Parse the new slot time key
+            new_date_str, new_start_time_str = new_slot_time_key.split('_')
+            new_appointment_time = datetime.strptime(f"{new_date_str} {new_start_time_str}", "%Y-%m-%d %H:%M:%S")
+            doctor_id = appointment["doctor_id"]
+
+            # Check if the new slot is still available
+            existing_appointments = supabase.table("appointments").select("id").eq("doctor_id", doctor_id).eq("appointment_time", new_appointment_time.isoformat()).execute().data
+            if existing_appointments:
+                flash("The selected new time slot is no longer available.", "danger")
+                return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
+
+            # Update the existing appointment with the new time
+            supabase.table("appointments").update({
+                "appointment_time": new_appointment_time.isoformat(),
+                "status": "pending" # Reset status in case it was changed
+            }).eq("id", appointment_id).execute()
+
+            flash("Appointment rescheduled successfully!", "success")
+            return redirect(url_for("my_bookings")) # Or user_dashboard
+
+        except ValueError:
+            flash("Invalid time format selected.", "danger")
+            return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
+        except Exception as e:
+            print(f"Error rescheduling appointment: {e}")
+            flash("Failed to reschedule appointment. Please try again.", "danger")
+            return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
+
+    # GET request: Show available slots for the same doctor
+    # 1. Fetch all weekly availability for the doctor
+    weekly_availability_raw = supabase.table("doctor_weekly_availability").select(
+        "id, doctor_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active"
+    ).eq("doctor_id", appointment["doctor_id"]).eq("is_active", True).execute().data
+
+    # 2. Fetch all existing appointments for the doctor to check against
+    booked_appointments_raw = supabase.table("appointments").select("appointment_time").eq("doctor_id", appointment["doctor_id"]).execute().data
+    booked_times = set()
+    for appt in booked_appointments_raw:
+        # Exclude the appointment being rescheduled from the booked times
+        if appt["appointment_time"] != appointment["appointment_time"]:
+            appt_time_str = appt["appointment_time"][:16] # YYYY-MM-DD HH:MM
+            booked_times.add(appt_time_str)
+
+    # 3. Calculate available slots for the next 7 days, excluding the current appointment's time and other bookings
+    today = datetime.now().date()
+    available_calculated_slots = []
+    for i in range(7): # Next 7 days
+        target_date = today + timedelta(days=i)
+        day_name = target_date.strftime("%A") # e.g., "Monday"
+        # Find weekly availability for this day of the week
+        day_availability = [av for av in weekly_availability_raw if av["day_of_week"] == day_name]
+        for av_range in day_availability:
+            start_time_str = av_range["start_time"]
+            end_time_str = av_range["end_time"]
+            slot_duration = av_range.get("slot_duration_minutes", 30) # Default if not set
+
+            # Parse times
+            start_dt = datetime.combine(target_date, datetime.strptime(start_time_str, "%H:%M:%S").time())
+            end_dt = datetime.combine(target_date, datetime.strptime(end_time_str, "%H:%M:%S").time())
+
+            current_time = start_dt
+            while current_time < end_dt:
+                slot_start_str = current_time.strftime("%H:%M:%S")
+                slot_key = f"{target_date.strftime('%Y-%m-%d')}_{slot_start_str}"
+
+                # Check if this slot start time is already booked OR if it's the same as the original appointment time
+                slot_start_for_check = current_time.strftime("%Y-%m-%d %H:%M") # YYYY-MM-DD HH:MM
+                if slot_start_for_check not in booked_times and slot_start_for_check != appointment["appointment_time"][:16]:
+                    available_calculated_slots.append({
+                        "slot_key": slot_key, # Unique identifier for booking
+                        "date": target_date.strftime('%Y-%m-%d'),
+                        "start_time": slot_start_str,
+                        "end_time": (current_time + timedelta(minutes=slot_duration)).strftime("%H:%M:%S"), # Calculate end time
+                        "slot_duration": slot_duration,
+                        "day_of_week": day_name
+                    })
+
+                current_time += timedelta(minutes=slot_duration)
+
+    # Pass the appointment details and available slots to the template
+    return render_template("reschedule_appointment.html", appointment=appointment, available_slots=available_calculated_slots)
+
+
 # ============================================================
 # Routes - Subscription Management
 # ============================================================

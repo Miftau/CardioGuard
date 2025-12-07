@@ -200,8 +200,17 @@
                   </span>
                 </td>
                 <td class="py-3 px-4">
-                  <!-- Example action: view details or reschedule -->
-                  <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm">View Details</a>
+                  <!-- NEW: Manage Appointment Actions -->
+                  {% if appt.status == 'pending' %}
+                    <div class="flex space-x-2">
+                      <a href="{{ url_for('reschedule_appointment', appointment_id=appt.id) }}" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Reschedule</a>
+                      <form method="POST" action="{{ url_for('cancel_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to cancel this appointment?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Cancel</button>
+                      </form>
+                    </div>
+                  {% else %}
+                    <span class="text-gray-400 text-sm">{{ appt.status | title }}</span>
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}
@@ -289,7 +298,7 @@
 </section>
 
 <!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js    "></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js      "></script>
 <script>
 const ctx = document.getElementById('healthChart');
 new Chart(ctx, {
