@@ -36,6 +36,7 @@
           type="date"
           class="border border-gray-300 rounded-xl p-3 w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-red-400 shadow-sm"
           min="{{ (now() or datetime.now()).date().isoformat() }}" <!-- Ensure min date is today -->
+        />
       </div>
     </div>
 
@@ -55,7 +56,9 @@
         <!-- NEW: Hidden input for meeting URL (generated on backend) -->
         <input type="hidden" name="meeting_url" id="meetingUrlInput">
         <form method="POST" id="bookForm">
-          <input type="hidden" name="slot_id" id="selectedSlotId">
+          <!-- NEW: Hidden fields for slot key and doctor ID -->
+          <input type="hidden" name="slot_time_key" id="selectedSlotKey">
+          <input type="hidden" name="selected_doctor_id" id="selectedDoctorId">
           <div class="flex gap-4">
             <button
               type="submit"
@@ -78,14 +81,15 @@
 </section>
 
 <script>
-  // Data passed from the backend
-  const allSlots = {{ slots|tojson }}; // This now includes the 'rating' key for each slot
+  // Data passed from the backend - Now contains pre-calculated available slots
+  const allSlots = {{ slots|tojson }}; // Contains: { slot_key: "YYYY-MM-DD_HH:MM:SS", doctor_id, doctor, specialization, rating, date, start_time, end_time, slot_duration, day_of_week }
   const container = document.getElementById("doctorsContainer");
   const calendar = document.getElementById("calendarDate");
   const confirmationSection = document.getElementById("confirmationSection");
   const bookForm = document.getElementById("bookForm");
-  const selectedSlotId = document.getElementById("selectedSlotId");
-  const meetingUrlInput = document.getElementById("meetingUrlInput"); // NEW: Get the hidden meeting URL input
+  const selectedSlotKey = document.getElementById("selectedSlotKey"); // NEW: Get the hidden slot key input
+  const selectedDoctorId = document.getElementById("selectedDoctorId"); // NEW: Get the hidden doctor ID input
+  const meetingUrlInput = document.getElementById("meetingUrlInput");
   const confirmationText = document.getElementById("confirmationText");
   const cancelBookingBtn = document.getElementById("cancelBooking");
 
@@ -121,13 +125,10 @@
       if (!doctors[s.doctor_id]) {
         doctors[s.doctor_id] = {
           doctor: s.doctor,
-          rating: s.rating, // Get the rating from the first slot for this doctor (they should all be the same for a given doctor)
-          slots: []
+          specialization: s.specialization,
+          rating: s.rating,
+          slots: [] // Store slots for this doctor on this specific date
         };
-      }
-      // Ensure rating is consistent across slots for the same doctor, or just use the one from the first slot found
-      if (doctors[s.doctor_id].rating === undefined) {
-          doctors[s.doctor_id].rating = s.rating;
       }
       doctors[s.doctor_id].slots.push(s);
     });
@@ -137,26 +138,23 @@
       const card = document.createElement("div");
       card.className = "bg-white rounded-2xl shadow-lg p-6 border border-gray-100 transition-all duration-300 hover:shadow-xl";
 
-      // Create slot buttons HTML
+      // --- NEW: Group slots by their time range for a calendar-like view ---
+      // Group by start_time to potentially show wider time ranges if slots are consecutive
+      // For simplicity, let's just list individual slots as time buttons
       const slotsHTML = data.slots.map(s => `
-        <button
-          class="slot-btn bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 text-blue-700 px-4 py-2 rounded-xl hover:from-blue-100 hover:to-blue-200 hover:border-blue-300 hover:text-blue-800 transition duration-200 shadow-sm"
-          data-id="${s.id}"
-          data-time="${s.start} - ${s.end}"
-          data-doctor="${data.doctor}"
-        >
-          ${s.start} - ${s.end}
-        </button>
+        <label class="time-slot-label bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 text-blue-700 px-4 py-2 rounded-xl hover:from-blue-100 hover:to-blue-200 hover:border-blue-300 hover:text-blue-800 transition duration-200 shadow-sm cursor-pointer inline-block mr-2 mb-2">
+          <input type="radio" name="slot_selection_${doctorId}" value="${s.slot_key}" class="slot-radio hidden" data-doctor-id="${doctorId}" data-time="${s.start_time} - ${s.end_time}">
+          ${s.start_time} - ${s.end_time}
+        </label>
       `).join("");
 
       // --- NEW: Render Rating Stars ---
-      // Create a function to generate star HTML based on rating
       function renderStars(rating) {
           if (!rating || rating === 'No ratings yet') {
               return '<span class="text-gray-500 text-sm">No ratings yet</span>';
           }
           let starsHTML = '<div class="flex items-center mt-1">';
-          const roundedRating = Math.round(rating); // Round the rating to nearest integer for stars
+          const roundedRating = Math.round(rating);
           for (let i = 1; i <= 5; i++) {
               if (i <= roundedRating) {
                   starsHTML += '<span class="text-yellow-500">★</span>';
@@ -164,31 +162,29 @@
                   starsHTML += '<span class="text-gray-300">☆</span>';
               }
           }
-          starsHTML += `<span class="ml-2 text-gray-600 text-sm">(${rating})</span>`; // Display the actual rating number
+          starsHTML += `<span class="ml-2 text-gray-600 text-sm">(${rating})</span>`;
           starsHTML += '</div>';
           return starsHTML;
       }
 
       card.innerHTML = `
-        <div class="flex items-start mb-4"> <!-- Changed to items-start for alignment -->
+        <div class="flex items-start mb-4">
           <div class="w-12 h-12 bg-gradient-to-r from-red-100 to-red-200 text-red-700 rounded-xl flex items-center justify-center font-bold text-lg">
             ${data.doctor[0].toUpperCase()}
           </div>
-          <div class="ml-4 flex-1"> <!-- Added flex-1 to allow rating to align right -->
-            <div class="flex justify-between items-start"> <!-- Flex container for name and rating -->
+          <div class="ml-4 flex-1">
+            <div class="flex justify-between items-start">
               <div>
                 <h3 class="text-lg font-bold text-gray-800">Dr. ${data.doctor}</h3>
-                <p class="text-gray-600 text-sm">Cardiology Specialist</p>
-              </div>
-              <div class="text-right"> <!-- Align rating to the right -->
+                <p class="text-gray-600 text-sm">${data.specialization}</p>
                 ${renderStars(data.rating)}
               </div>
             </div>
           </div>
         </div>
         <div class="border-t border-gray-200 pt-4">
-          <h4 class="font-semibold text-gray-700 mb-3">Available Time Slots:</h4>
-          <div class="flex flex-wrap gap-3" id="slots-${doctorId}">
+          <h4 class="font-semibold text-gray-700 mb-3">Available Time Slots on ${date}:</h4>
+          <div class="flex flex-wrap gap-2" id="slots-${doctorId}">
             ${slotsHTML}
           </div>
         </div>
@@ -197,41 +193,47 @@
       container.appendChild(card);
     }
 
-    // Attach event listeners to the newly created slot buttons
-    attachSlotEvents();
+    // Attach event listeners to the newly created time slot radio buttons
+    attachTimeSlotEvents();
   }
 
-  // --- Handle Slot Selection ---
-  function attachSlotEvents() {
-    document.querySelectorAll(".slot-btn").forEach(btn => {
-      btn.addEventListener("click", e => {
-        e.preventDefault();
-        // Deselect any previously selected slot
-        document.querySelectorAll(".slot-btn").forEach(b => {
-          b.classList.remove("bg-gradient-to-r", "from-green-100", "to-green-200", "border-green-400", "text-green-800");
-          b.classList.add("bg-gradient-to-r", "from-blue-50", "to-blue-100", "border-blue-200", "text-blue-700");
-        });
+  // --- Handle Time Slot Selection ---
+  function attachTimeSlotEvents() {
+    document.querySelectorAll(".slot-radio").forEach(radio => {
+      radio.addEventListener("change", e => {
+        if (e.target.checked) {
+          // Deselect any previously selected slot
+          document.querySelectorAll(".time-slot-label").forEach(label => {
+            label.classList.remove("bg-gradient-to-r", "from-green-100", "to-green-200", "border-green-400", "text-green-800");
+            label.classList.add("bg-gradient-to-r", "from-blue-50", "to-blue-100", "border-blue-200", "text-blue-700");
+          });
 
-        // Select the clicked slot
-        btn.classList.remove("bg-gradient-to-r", "from-blue-50", "to-blue-100", "border-blue-200", "text-blue-700");
-        btn.classList.add("bg-gradient-to-r", "from-green-100", "to-green-200", "border-green-400", "text-green-800");
+          // Select the clicked slot's label
+          const label = e.target.parentElement;
+          label.classList.remove("bg-gradient-to-r", "from-blue-50", "to-blue-100", "border-blue-200", "text-blue-700");
+          label.classList.add("bg-gradient-to-r", "from-green-100", "to-green-200", "border-green-400", "text-green-800");
 
-        // Update the hidden form field with the selected slot ID
-        selectedSlotId.value = btn.getAttribute("data-id");
+          // Update the hidden form fields with the selected slot key and doctor ID
+          selectedSlotKey.value = e.target.value;
+          selectedDoctorId.value = e.target.getAttribute("data-doctor-id");
 
-        // NEW: Clear the meeting URL input when a new slot is selected
-        meetingUrlInput.value = "";
+          // NEW: Clear the meeting URL input when a new slot is selected
+          meetingUrlInput.value = "";
 
-        // Update confirmation text
-        const selectedTime = btn.getAttribute("data-time");
-        const selectedDoctor = btn.getAttribute("data-doctor");
-        confirmationText.textContent = `You have selected an appointment with Dr. ${selectedDoctor} at ${selectedTime} on ${calendar.value}. Please confirm to proceed.`;
+          // Update confirmation text
+          const selectedTime = e.target.getAttribute("data-time");
+          const selectedDoctorId = e.target.getAttribute("data-doctor-id");
+          // Find the doctor name in the data for confirmation text
+          const selectedSlotData = allSlots.find(s => s.slot_key === e.target.value);
+          const selectedDoctorName = selectedSlotData ? selectedSlotData.doctor : 'Unknown Doctor';
+          confirmationText.textContent = `You have selected an appointment with Dr. ${selectedDoctorName} at ${selectedTime} on ${calendar.value}. Please confirm to proceed.`;
 
-        // Show the confirmation section
-        confirmationSection.classList.remove("hidden");
+          // Show the confirmation section
+          confirmationSection.classList.remove("hidden");
 
-        // Scroll to the confirmation section
-        confirmationSection.scrollIntoView({ behavior: "smooth" });
+          // Scroll to the confirmation section
+          confirmationSection.scrollIntoView({ behavior: "smooth" });
+        }
       });
     });
   }
@@ -245,13 +247,14 @@
   // --- Cancel Booking Listener ---
   cancelBookingBtn.addEventListener("click", e => {
       e.preventDefault();
-      // Deselect any selected slot button
-      document.querySelectorAll(".slot-btn").forEach(b => {
-        b.classList.remove("bg-gradient-to-r", "from-green-100", "to-green-200", "border-green-400", "text-green-800");
-        b.classList.add("bg-gradient-to-r", "from-blue-50", "to-blue-100", "border-blue-200", "text-blue-700");
+      // Deselect any selected time slot label
+      document.querySelectorAll(".time-slot-label").forEach(label => {
+        label.classList.remove("bg-gradient-to-r", "from-green-100", "to-green-200", "border-green-400", "text-green-800");
+        label.classList.add("bg-gradient-to-r", "from-blue-50", "to-blue-100", "border-blue-200", "text-blue-700");
       });
-      // Clear the selected slot ID
-      selectedSlotId.value = "";
+      // Clear the selected slot key and doctor ID
+      selectedSlotKey.value = "";
+      selectedDoctorId.value = "";
       // NEW: Clear the meeting URL input when cancelled
       meetingUrlInput.value = "";
       // Hide the confirmation section
@@ -269,4 +272,38 @@
   });
 
 </script>
+<style>
+/* NEW: Style for the time slot labels to look like buttons */
+.time-slot-label {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  margin: 0.25rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-align: center;
+  font-size: 0.875rem; /* text-sm */
+  line-height: 1.25rem; /* leading-5 */
+  border: 2px solid transparent; /* Ensure border changes are visible */
+}
+
+.time-slot-label:hover {
+  transform: translateY(-1px); /* Slight lift on hover */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-sm */
+}
+
+/* Style for the selected time slot label */
+.time-slot-label input[type="radio"]:checked + .time-slot-label,
+.time-slot-label.checked { /* In case you add the class manually */
+  background: linear-gradient(to right, #4ade80, #22c55e); /* from-green-400 to-green-500 */
+  border-color: #16a34a; /* border-green-600 */
+  color: #15803d; /* text-green-700 */
+  font-weight: 500; /* font-medium */
+}
+
+/* Hide the actual radio button */
+.slot-radio {
+  display: none;
+}
+</style>
 {% endblock %}

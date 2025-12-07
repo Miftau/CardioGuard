@@ -1,5 +1,6 @@
+<!-- templates/doctor_availability.html -->
 {% extends "base.html" %}
-{% block title %}Manage Availability{% endblock %}
+{% block title %}Manage Weekly Availability{% endblock %}
 {% block sidebar %}
     <!-- Only include the sidebar if a user is logged in -->
     {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
@@ -14,32 +15,40 @@
       <div>
         <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
           <span class="bg-gradient-to-r from-red-500 to-red-700 p-2 rounded-lg text-white">📅</span>
-          Manage Your Availability
+          Manage Your Weekly Availability
         </h1>
-        <p class="text-gray-600 mt-1">Set your available time slots for appointments</p>
+        <p class="text-gray-600 mt-1">Set your available time slots for appointments by day of the week</p>
       </div>
       <a href="/doctor/dashboard" class="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-5 py-2.5 rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-md hover:shadow-lg transition duration-300 text-center min-w-[120px]">
         Back to Dashboard
       </a>
     </div>
 
-    <!-- Add Availability Form Card -->
+    <!-- Add Weekly Availability Form Card -->
     <div class="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-100">
       <h2 class="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
         <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">➕</span>
-        Add New Time Slot
+        Add New Weekly Time Slot
       </h2>
       <form method="POST" class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label for="available_date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
-            <input
-              type="date"
-              name="available_date"
-              id="available_date"
+            <label for="day_of_week" class="block text-sm font-medium text-gray-700 mb-1">Day of Week</label>
+            <select
+              name="day_of_week"
+              id="day_of_week"
               required
               class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent shadow-sm"
-              min="{{ now().date()|string }}" <!-- Ensure min date is today -->
+            >
+              <option value="">Select a day</option>
+              <option value="Monday">Monday</option>
+              <option value="Tuesday">Tuesday</option>
+              <option value="Wednesday">Wednesday</option>
+              <option value="Thursday">Thursday</option>
+              <option value="Friday">Friday</option>
+              <option value="Saturday">Saturday</option>
+              <option value="Sunday">Sunday</option>
+            </select>
           </div>
           <div>
             <label for="start_time" class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
@@ -61,46 +70,62 @@
               class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent shadow-sm"
             />
           </div>
+          <div>
+            <label for="slot_duration" class="block text-sm font-medium text-gray-700 mb-1">Slot Duration (minutes)</label>
+            <select
+              name="slot_duration"
+              id="slot_duration"
+              required
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent shadow-sm"
+            >
+              <option value="15">15 minutes</option>
+              <option value="30" selected>30 minutes</option>
+              <option value="45">45 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+          </div>
         </div>
         <div class="pt-2">
           <button
             type="submit"
             class="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-2.5 rounded-xl hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg transition duration-300"
           >
-            Add Time Slot
+            Add Weekly Time Slot
           </button>
         </div>
       </form>
     </div>
 
-    <!-- Existing Availability Slots Card -->
+    <!-- Existing Weekly Availability Slots Card -->
     <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
       <h2 class="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
         <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">📋</span>
-        Your Current Availability
+        Your Current Weekly Availability
       </h2>
-      {% if slots %}
+      {% if weekly_availability %}
         <div class="overflow-x-auto">
           <table class="w-full border-collapse">
             <thead>
               <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
-                <th class="py-3 px-4 rounded-l-lg">Date</th>
+                <th class="py-3 px-4 rounded-l-lg">Day of Week</th>
                 <th class="py-3 px-4">Start Time</th>
                 <th class="py-3 px-4">End Time</th>
+                <th class="py-3 px-4">Slot Duration (min)</th>
                 <th class="py-3 px-4 rounded-r-lg">Status</th>
               </tr>
             </thead>
             <tbody>
-              {% for s in slots %}
+              {% for s in weekly_availability %}
               <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
-                <td class="py-3 px-4 font-medium text-gray-800">{{ s.available_date }}</td>
+                <td class="py-3 px-4 font-medium text-gray-800">{{ s.day_of_week }}</td>
                 <td class="py-3 px-4 text-gray-600">{{ s.start_time }}</td>
                 <td class="py-3 px-4 text-gray-600">{{ s.end_time }}</td>
+                <td class="py-3 px-4 text-gray-600">{{ s.slot_duration_minutes }}</td>
                 <td class="py-3 px-4">
-                  {% if s.is_booked %}
-                    <span class="bg-red-100 text-red-800 text-xs px-2.5 py-1 rounded-full">Booked</span>
+                  {% if s.is_active %}
+                    <span class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full">Active</span>
                   {% else %}
-                    <span class="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full">Available</span>
+                    <span class="bg-yellow-100 text-yellow-800 text-xs px-2.5 py-1 rounded-full">Inactive</span>
                   {% endif %}
                 </td>
               </tr>
@@ -113,7 +138,42 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p class="text-gray-600">You have not added any availability slots yet.</p>
+          <p class="text-gray-600">You have not added any weekly availability slots yet.</p>
+        </div>
+      {% endif %}
+
+      <!-- Display One-off Availability (if still relevant) -->
+      {% if one_off_availability %}
+        <div class="mt-10">
+          <h3 class="text-lg font-semibold mb-3 text-gray-700">One-off Availability (Legacy)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse">
+              <thead>
+                <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
+                  <th class="py-2 px-3 rounded-l-lg">Date</th>
+                  <th class="py-2 px-3">Start Time</th>
+                  <th class="py-2 px-3">End Time</th>
+                  <th class="py-2 px-3 rounded-r-lg">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in one_off_availability %}
+                <tr class="border-b border-gray-200">
+                  <td class="py-2 px-3 font-medium text-gray-800">{{ s.available_date }}</td>
+                  <td class="py-2 px-3 text-gray-600">{{ s.start_time }}</td>
+                  <td class="py-2 px-3 text-gray-600">{{ s.end_time }}</td>
+                  <td class="py-2 px-3">
+                    {% if s.is_booked %}
+                      <span class="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">Booked</span>
+                    {% else %}
+                      <span class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">Available</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       {% endif %}
     </div>

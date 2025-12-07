@@ -1434,110 +1434,219 @@ def chat_history(user_id):
 # ============================================================
 # Routes - Doctor Features
 # ============================================================
+
 @app.route("/doctor/availability", methods=["GET", "POST"])
+@login_required
 def doctor_availability():
     if session.get("role") != "doctor":
         flash("Doctor access only.", "warning")
         return redirect(url_for("login"))
-    user_id = session.get("user_id")
-    # find doctor record
-    doctor_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
-    if not doctor_data.data:
-        flash("Doctor profile not found.", "danger")
-        return redirect(url_for("doctor_dashboard"))
-    doctor_id = doctor_data.data["id"]
+
+    user_id = session.get("id")
+    # Fetch doctor record using user_id
+    try:
+        doctor_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
+        if not doctor_data:
+            flash("Doctor profile not found.", "danger")
+            return redirect(url_for("doctor_dashboard"))
+        doctor_id = doctor_data.data["id"]
+    except Exception as e:
+        print(f"Error fetching doctor profile in availability: {e}")
+        flash("Error accessing dashboard. Please try again later.", "danger")
+        return redirect(url_for("login"))
+
     if request.method == "POST":
-        date_str = request.form.get("available_date")
+        day_of_week = request.form.get("day_of_week")
         start_time = request.form.get("start_time")
         end_time = request.form.get("end_time")
-        try:
-            available_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-            supabase.table("doctor_availability").insert({
-                "doctor_id": doctor_id,
-                "available_date": str(available_date),
-                "start_time": start_time,
-                "end_time": end_time
-            }).execute()
-            flash("Availability added successfully.", "success")
-        except Exception as e:
-            print("Error adding availability:", e)
-            flash("Failed to add availability.", "danger")
-        return redirect(url_for("doctor_availability"))
-    # GET request
-    slots = supabase.table("doctor_availability").select("*").eq("doctor_id", doctor_id).order("available_date").execute().data
-    return render_template("doctor_availability.html", slots=slots)
+        slot_duration_str = request.form.get("slot_duration", "30") # Default to 30 minutes
 
+        try:
+            slot_duration = int(slot_duration_str)
+            if slot_duration <= 0:
+                raise ValueError("Slot duration must be positive.")
+        except ValueError:
+            flash("Invalid slot duration.", "danger")
+            return redirect(url_for("doctor_availability"))
+
+        try:
+            # Insert the weekly availability range
+            supabase.table("doctor_weekly_availability").insert({
+                "doctor_id": doctor_id,
+                "day_of_week": day_of_week,
+                "start_time": start_time,
+                "end_time": end_time,
+                "slot_duration_minutes": slot_duration,
+                "is_active": True # Default to active
+            }).execute()
+            flash("Weekly availability added successfully.", "success")
+        except Exception as e:
+            print("Error adding weekly availability:", e)
+            flash("Failed to add weekly availability.", "danger")
+        return redirect(url_for("doctor_availability"))
+
+    # GET request: Fetch existing weekly availability for this doctor
+    weekly_availability = supabase.table("doctor_weekly_availability").select("*").eq("doctor_id", doctor_id).order("day_of_week").execute().data
+    # Also fetch any existing one-off availability (if you still want to support them)
+    one_off_availability = supabase.table("doctor_availability").select("*").eq("doctor_id", doctor_id).order("available_date").execute().data
+    return render_template("doctor_availability.html", weekly_availability=weekly_availability, one_off_availability=one_off_availability)
 
 @app.route("/book", methods=["GET", "POST"])
 @login_required
-#@check_subscription_access # Apply access control
 def book_appointment():
     if session.get("role") != "user":
         flash("Login as a user to book an appointment.", "warning")
         return redirect(url_for("login"))
+
     if request.method == "POST":
-        slot_id = request.form.get("slot_id")
-        # Fetch slot
-        slot_data = supabase.table("doctor_availability").select("*").eq("id", slot_id).single().execute()
-        if not slot_data:
-            flash("Invalid slot selected.", "danger")
+        # Handle booking confirmation (slot_id is now the specific appointment time key)
+        slot_time_key = request.form.get("slot_time_key")
+        doctor_id = request.form.get("selected_doctor_id") # Assuming you pass this via hidden field in the form
+
+        if not slot_time_key or not doctor_id:
+            flash("Invalid booking request.", "danger")
             return redirect(url_for("book_appointment"))
-        slot = slot_data.data
-        if slot.get("is_booked"):
-            flash("This slot has already been booked.", "danger")
+
+        try:
+            # Parse the slot_time_key (e.g., "2025-12-10_09:30:00")
+            date_str, time_str = slot_time_key.split('_')
+            appointment_time = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            flash("Invalid time format selected.", "danger")
             return redirect(url_for("book_appointment"))
-        # Create appointment
-        doctor_id = slot["doctor_id"]
-        user_id = session.get("user_id")
-        dt_str = f"{slot['available_date']} {slot['start_time']}"
-        appointment_time = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+
+        user_id = session.get("id")
+
+        # Check if the specific time is still available (double-check against DB)
+        # Check for any appointment on the same date and time for this doctor
+        existing_appointments = supabase.table("appointments").select("id").eq("doctor_id", doctor_id).eq("appointment_time", appointment_time.isoformat()).execute().data
+        if existing_appointments:
+            flash("This time slot has just been booked by someone else. Please select another slot.", "danger")
+            return redirect(url_for("book_appointment"))
+
         # --- NEW: Generate Jitsi URL ---
-        jitsi_url = generate_jitsi_url(slot_id, dt_str) # Use slot_id and time_str for uniqueness
+        jitsi_url = generate_jitsi_url(f"{doctor_id}_{appointment_time.isoformat()}", appointment_time.isoformat())
+
+        # Create appointment using the specific calculated time
         supabase.table("appointments").insert({
             "user_id": user_id,
             "doctor_id": doctor_id,
             "appointment_time": appointment_time.isoformat(),
             "status": "pending",
-            "meeting_url": jitsi_url # Add the generated URL
+            "meeting_url": jitsi_url
         }).execute()
-        # Mark slot as booked
-        supabase.table("doctor_availability").update({"is_booked": True}).eq("id", slot_id).execute()
-        # --- NEW: Send Appointment Reminder Email ---
-        # Fetch doctor details for the email
-        doctor_details = supabase.table("doctors").select("id, specialization").eq("id", doctor_id).single().execute().data
+
+        # Send Appointment Reminder Email (fetch doctor/user details again for email)
+        doctor_details = supabase.table("doctors").select("specialization").eq("id", doctor_id).single().execute().data
         user_details = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
-        doctor_name = doctor_details.get("specialization", "Unknown") # Or fetch from user table if needed
+        doctor_name = doctor_details.get("specialization", "Unknown")
         user_name = user_details.get("name")
         user_email = user_details.get("email")
         appointment_time_str = appointment_time.strftime("%Y-%m-%d at %H:%M")
-        send_appointment_reminder_email(slot_id, user_email, user_name, doctor_name, appointment_time_str)
+        send_appointment_reminder_email(f"{doctor_id}_{appointment_time.isoformat()}", user_email, user_name, doctor_name, appointment_time_str)
+
         flash("Appointment booked successfully!", "success")
         return redirect(url_for("user_dashboard"))
-    # GET: get all available slots
-    available_slots = supabase.table("doctor_availability").select(
-        "id, doctor_id, available_date, start_time, end_time"
-    ).eq("is_booked", False).execute().data
-    # --- UPDATE: Fetch doctor details including rating ---
-    doctors_data = supabase.table("doctors").select("id, specialization, bio, rating").execute().data # Add 'rating' here
-    doctor_lookup = {d["id"]: d for d in doctors_data}
-    # Build a frontend-friendly JSON object for JavaScript
+
+    # --- GET REQUEST LOGIC ---
+    # 1. Fetch all weekly availability for all doctors
+    weekly_availability_raw = supabase.table("doctor_weekly_availability").select(
+        "id, doctor_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active"
+    ).eq("is_active", True).execute().data
+
+    # 2. Fetch all existing appointments to check against
+    booked_appointments_raw = supabase.table("appointments").select("doctor_id, appointment_time").execute().data
+    booked_times = {}
+    for appt in booked_appointments_raw:
+        doctor_id = appt["doctor_id"]
+        appt_time_str = appt["appointment_time"][:16] # YYYY-MM-DD HH:MM
+        if doctor_id not in booked_times:
+            booked_times[doctor_id] = set()
+        booked_times[doctor_id].add(appt_time_str)
+
+    # 3. Calculate available slots for today (or a default date) for display
+    # For simplicity, let's show availability for the next 7 days
+    today = datetime.now().date()
+    available_calculated_slots = []
+    for i in range(7): # Next 7 days
+        target_date = today + timedelta(days=i)
+        day_name = target_date.strftime("%A") # e.g., "Monday"
+        # Find weekly availability for this day of the week
+        day_availability = [av for av in weekly_availability_raw if av["day_of_week"] == day_name]
+        for av_range in day_availability:
+            doctor_id = av_range["doctor_id"]
+            start_time_str = av_range["start_time"]
+            end_time_str = av_range["end_time"]
+            slot_duration = av_range.get("slot_duration_minutes", 30) # Default if not set
+
+            # Parse times
+            start_dt = datetime.combine(target_date, datetime.strptime(start_time_str, "%H:%M:%S").time())
+            end_dt = datetime.combine(target_date, datetime.strptime(end_time_str, "%H:%M:%S").time())
+
+            current_time = start_dt
+            while current_time < end_dt: # Use < not <= to avoid creating a slot that ends exactly at end_time
+                slot_start_str = current_time.strftime("%H:%M:%S")
+                slot_key = f"{target_date.strftime('%Y-%m-%d')}_{slot_start_str}"
+
+                # Check if this slot start time is already booked
+                slot_start_for_check = current_time.strftime("%Y-%m-%d %H:%M") # YYYY-MM-DD HH:MM
+                if slot_start_for_check not in booked_times.get(doctor_id, set()):
+                    available_calculated_slots.append({
+                        "slot_key": slot_key, # Unique identifier for booking
+                        "doctor_id": doctor_id,
+                        "date": target_date.strftime('%Y-%m-%d'),
+                        "start_time": slot_start_str,
+                        "end_time": (current_time + timedelta(minutes=slot_duration)).strftime("%H:%M:%S"), # Calculate end time
+                        "slot_duration": slot_duration,
+                        "day_of_week": day_name
+                    })
+
+                current_time += timedelta(minutes=slot_duration)
+
+    # 4. Fetch doctor details (name, rating) for the available slots
+    doctor_ids_needed = list({s["doctor_id"] for s in available_calculated_slots})
+    doctor_details_map = {}
+    if doctor_ids_needed:
+        # Fetch doctor-specific data (specialization, rating)
+        doctors_data = supabase.table("doctors").select("id, specialization, rating").in_("id", doctor_ids_needed).execute().data
+        # Fetch user data (name) for the same doctors
+        users_data = supabase.table("users").select("id, name").in_("id", doctor_ids_needed).execute().data
+
+        # Create a lookup for doctor details
+        doctor_info = {d["id"]: d for d in doctors_data}
+        # Create a lookup for user names
+        user_names = {u["id"]: u["name"] for u in users_data}
+
+        # Combine details into the final lookup dictionary
+        for doctor_id in doctor_ids_needed:
+            doc_info = doctor_info.get(doctor_id, {})
+            user_name = user_names.get(doctor_id, "Unknown Doctor")
+            doctor_details_map[doctor_id] = {
+                "name": user_name,
+                "specialization": doc_info.get("specialization", "N/A"),
+                "rating": doc_info.get("rating", "No ratings yet")
+            }
+
+    # 5. Prepare final slot data for the template, including doctor name/rating
     formatted_slots = []
-    formatted_slots.extend(
-        {
-            "id": s["id"],
+    for s in available_calculated_slots:
+        doctor_info = doctor_details_map.get(s["doctor_id"], {})
+        formatted_slots.append({
+            "slot_key": s["slot_key"],
             "doctor_id": s["doctor_id"],
-            "doctor": doctor_lookup.get(s["doctor_id"], {}).get(
-                "specialization", "Unknown"
-            ),
-            # --- UPDATE: Include rating in the formatted slot data ---
-            "rating": doctor_lookup.get(s["doctor_id"], {}).get("rating", "No ratings yet"), # Add rating info
-            "date": s["available_date"],
-            "start": s["start_time"],
-            "end": s["end_time"],
-        }
-        for s in available_slots
-    )
+            "doctor": doctor_info.get("name", "Unknown Doctor"),
+            "specialization": doctor_info.get("specialization", "N/A"),
+            "rating": doctor_info.get("rating", "No ratings yet"),
+            "date": s["date"],
+            "start_time": s["start_time"],
+            "end_time": s["end_time"],
+            "slot_duration": s["slot_duration"],
+            "day_of_week": s["day_of_week"]
+        })
+
+    # Pass the calculated available slots to the template
     return render_template("book_appointment.html", slots=formatted_slots)
+
 
 @app.route("/my-bookings")
 @login_required
