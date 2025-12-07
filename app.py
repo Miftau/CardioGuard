@@ -1676,7 +1676,7 @@ def doctor_dashboard():
     try:
         # Fetch doctor profile details (name, email, bio, specialization from users and doctors tables)
         user_data = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
-        doctor_details = supabase.table("doctors").select("bio, specialization, consultation_fee").eq("id", doctor_id).single().execute().data
+        doctor_details = supabase.table("doctors").select("bio, specialization, consultation_fee, rating").eq("id", doctor_id).single().execute().data
         # Combine user and doctor data
         profile_info = {**user_data, **doctor_details}
         # Fetch availability slots for this doctor
