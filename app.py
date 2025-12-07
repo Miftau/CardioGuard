@@ -896,7 +896,7 @@ def login():
                             doctor_check = supabase.table("doctors").select("id").eq("id", user["id"]).execute()
                             if doctor_check.data:
                                 role = "doctor"
-                                session["doctor_id"] = doctor_check.data[0]["id"]
+                                session["id"] = doctor_check.data[0]["id"]
                         session["role"] = role
                         # --- STEP 1B: Redirect Based on Role ---
                         if role == "admin":
