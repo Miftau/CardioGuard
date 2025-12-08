@@ -157,10 +157,12 @@
                         <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Reject</button>
                       </form>
                     </div>
+                  {% elif appt.status == 'confirmed' %}
+                    <!-- Chat Link for Confirmed Appointments (points to new route) -->
+                    <div class="mt-2"> <!-- Added mt-2 for spacing below meeting link -->
+                      <a href="{{ url_for('appointment_chat', appointment_id=appt.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
+                    </div>
                   {% endif %}
-                  <!-- Example action: view details or update status (placed after meeting link) -->
-                  <!-- <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm ml-2">View Details</a> -->
-                </td>
               </tr>
               {% endfor %}
             </tbody>

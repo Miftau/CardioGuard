@@ -2237,7 +2237,7 @@ def reject_appointment(appointment_id):
         # Update the appointment status to cancelled (or rejected)
         supabase.table("appointments").update({"status": "cancelled"}).eq("id", appointment_id).execute()
 
-        # --- NEW: Send Rejection Email to User ---
+        # Send Rejection Email to User
         # Fetch user details for the email
         user_id = appointment["user_id"]
         user_details = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
@@ -2251,7 +2251,7 @@ def reject_appointment(appointment_id):
 
         send_appointment_rejected_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str)
 
-        # --- NEW: Send Notification to User ---
+        # Send Notification to User
         create_notification(user_id, "appointment_rejected_by_doctor", f"Your appointment with Dr. {doctor_name} on {appointment_time_str} has been rejected by the doctor.")
 
         flash("Appointment rejected successfully.", "info") # Use 'info' for rejection
@@ -2261,6 +2261,123 @@ def reject_appointment(appointment_id):
 
     # Redirect back to doctor dashboard
     return redirect(url_for("doctor_dashboard"))
+
+
+@app.route("/appointment/chat/<appointment_id>", methods=["GET", "POST"])
+@login_required
+def appointment_chat(appointment_id):
+    user_id = session.get("user_id")
+    role = session.get("role")
+
+    if not user_id or role not in ["user", "doctor"]:
+        flash("Access denied.", "danger")
+        return redirect(url_for("login"))
+
+    # Check if the appointment exists and belongs to the user or the doctor
+    appointment = None
+    try:
+        appointment_data = supabase.table("appointments").select("*").eq("id", appointment_id).single().execute()
+        appointment = appointment_data.data
+    except Exception as e:
+        print(f"Error fetching appointment {appointment_id}: {e}")
+        flash("Appointment not found.", "danger")
+        return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
+
+    if not appointment:
+        flash("Appointment not found.", "danger")
+        return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
+
+    # Check if user is the patient or the doctor for this appointment
+    is_patient = (role == "user" and appointment["user_id"] == user_id)
+    is_doctor = (role == "doctor" and appointment["doctor_id"] == user_id)
+
+    if not (is_patient or is_doctor):
+        flash("Access denied. You are not authorized to chat for this appointment.", "danger")
+        return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
+
+    # Check if appointment is confirmed (or at least pending) before allowing chat
+    # You might want to allow chat even for pending appointments, or only confirmed ones.
+    # Let's allow it for confirmed or pending.
+    if appointment["status"] not in ["confirmed", "pending"]:
+        flash("Chat is not available for this appointment status.", "warning")
+        return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
+
+    # Determine the other participant in the chat
+    other_user_id = appointment["doctor_id"] if is_patient else appointment["user_id"]
+    other_user_details = supabase.table("users").select("name, email").eq("id", other_user_id).single().execute().data
+    other_user_name = other_user_details.get("name", "Unknown")
+    other_user_email = other_user_details.get("email", "N/A")
+
+    # Handle sending a message (POST)
+    if request.method == "POST":
+        message_content = request.form.get("message", "").strip()
+        if message_content:
+            try:
+                # Insert into the NEW appointment_messages table
+                supabase.table("appointment_messages").insert({
+                    "sender_id": user_id,
+                    "receiver_id": other_user_id,
+                    "appointment_id": appointment_id,
+                    "message": message_content
+                }).execute()
+                flash("Message sent!", "success")
+            except Exception as e:
+                print(f"Error sending appointment message: {e}")
+                flash("Failed to send message. Please try again.", "danger")
+        # Redirect back to the same chat page to refresh messages
+        return redirect(url_for("appointment_chat", appointment_id=appointment_id))
+
+    # Handle fetching messages (GET or after POST redirect)
+    try:
+        # Fetch messages for this appointment from the NEW appointment_messages table, ordered by timestamp
+        # Use 'eq' for appointment_id and 'or_' for sender/receiver to get both sent and received messages
+        # Supabase's Python client might require two queries for OR logic on different columns
+        sent_messages = supabase.table("appointment_messages").select("*").eq("appointment_id", appointment_id).eq("sender_id", user_id).order("timestamp").execute().data or []
+        received_messages = supabase.table("appointment_messages").select("*").eq("appointment_id", appointment_id).eq("receiver_id", user_id).order("timestamp").execute().data or []
+        # Combine and sort messages by timestamp
+        all_messages = sorted(sent_messages + received_messages, key=lambda x: x['timestamp'])
+
+        # Optionally, mark unread messages from the other user as read
+        # This is typically done when the user views the chat page
+        try:
+            supabase.table("appointment_messages").update({"is_read": True}).eq("receiver_id", user_id).eq("appointment_id", appointment_id).eq("is_read", False).execute()
+        except Exception as e:
+            print(f"Error marking appointment messages as read: {e}")
+
+    except Exception as e:
+        print(f"Error fetching appointment messages for appointment {appointment_id}: {e}")
+        all_messages = [] # Default to empty list if fetch fails
+        flash("Error loading messages. Please try again later.", "warning")
+
+    # Pass appointment, other user details, and messages to the template
+    return render_template("appointment_chat.html",
+                           appointment=appointment,
+                           other_user={"id": other_user_id, "name": other_user_name, "email": other_user_email},
+                           messages=all_messages)
+
+
+@app.route("/api/appointment/chat/<appointment_id>/unread_count") # Optional: API endpoint for unread count specific to this chat
+@login_required
+def get_appointment_chat_unread_count(appointment_id):
+    user_id = session.get("user_id")
+    role = session.get("role")
+
+    # Verify user is part of the appointment
+    try:
+        appointment_data = supabase.table("appointments").select("user_id, doctor_id").eq("id", appointment_id).single().execute()
+        appointment = appointment_data.data
+        if not appointment or not ((role == "user" and appointment["user_id"] == user_id) or (role == "doctor" and appointment["doctor_id"] == user_id)):
+             return jsonify({"count": 0})
+    except:
+        return jsonify({"count": 0})
+
+    try:
+        # Count unread messages in the NEW appointment_messages table
+        res = supabase.table("appointment_messages").select("id", count="exact").eq("receiver_id", user_id).eq("appointment_id", appointment_id).eq("is_read", False).execute()
+        return jsonify({"count": res.count})
+    except Exception as e:
+        print(f"Error fetching appointment chat unread count: {e}")
+        return jsonify({"count": 0})
 
 
 
