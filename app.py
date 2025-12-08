@@ -50,6 +50,7 @@ import pandas as pd
 import numpy as np
 import shap
 import joblib
+from flask_sse import sse
 from jinja2 import Environment
 from datetime import datetime
 
@@ -88,6 +89,9 @@ CORS(app)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 limiter = Limiter(get_remote_address, app=app, default_limits=["10 per minute"])
+# SSE Configuration
+app.config['REDIS_URL'] = os.environ.get("REDIS_URL", "redis://localhost:6379") # for broadcasting
+app.register_blueprint(sse, url_prefix='/stream') # SSE blueprint registration with a prefix
 # Email config (optional)
 app.config.update(
     MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
@@ -236,6 +240,86 @@ def generate_jitsi_url(appointment_id, appointment_time_str):
 # ============================================================
 # Notification System (Email) Helpers
 # ============================================================
+# ... inside app.py, add or update this function ...
+
+def send_welcome_email_if_incomplete(user_id, email, name, role):
+    """Sends a welcome email and creates an in-app notification if the user's profile is incomplete."""
+    try:
+        if role == "doctor":
+            # Fetch doctor-specific details to check completeness
+            doctor_data = supabase.table("doctors").select("bio, specialization, license_number").eq("id", user_id).single().execute().data
+            bio = doctor_data.get("bio", "").strip()
+            spec = doctor_data.get("specialization", "").strip()
+            license_num = doctor_data.get("license_number", "").strip()
+
+            if not bio or not spec or not license_num:
+                subject = "[CardioGuard] Welcome Doctor! Please Complete Your Profile"
+                body = f"""
+                Hi {name},
+
+                Welcome to CardioGuard! 🎉
+
+                To start accepting appointments, please complete your professional profile:
+                - Add your specialization
+                - Write a short bio
+                - Provide your license number
+                - Set your consultation fee
+
+                Visit your dashboard to get started:
+                {url_for('doctor_dashboard', _external=True)}
+
+                Best regards,
+                The CardioGuard Team
+                """
+                notification_message = "Welcome! Please complete your doctor profile to start accepting appointments."
+            else:
+                # Profile is complete, maybe send a different welcome or just create a notification
+                subject = "[CardioGuard] Welcome Doctor!"
+                body = f"""
+                Hi {name},
+
+                Welcome to CardioGuard! Your profile is set up and ready.
+                You can now manage your availability and see bookings.
+
+                Best regards,
+                The CardioGuard Team
+                """
+                notification_message = "Welcome! Your doctor profile is ready."
+
+        elif role == "user":
+            # For users, the welcome is simpler, just a notification might suffice initially
+            subject = "[CardioGuard] Welcome User!"
+            body = f"""
+            Hi {name},
+
+            Welcome to CardioGuard! Explore the features and take care of your heart health.
+
+            Best regards,
+            The CardioGuard Team
+            """
+            notification_message = "Welcome to CardioGuard! Explore the features."
+
+        else:
+            # For admins, maybe just a notification or a different email
+            print(f"Welcome logic not defined for role: {role}")
+            return
+
+        # Send Email
+        msg = Message(
+            subject=subject,
+            recipients=[email],
+            body=body
+        )
+        mail.send(msg)
+        print(f"✅ Welcome email sent to {email}")
+
+        # Create In-App Notification
+        create_notification(user_id, "welcome", notification_message, channel="email") # Channel is email as source
+
+    except Exception as e:
+        print(f"Failed to check profile completeness, send welcome email, or create notification for user {user_id}: {e}")
+
+
 def send_appointment_reminder_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
     """
     Sends an email reminder for an appointment.
@@ -280,6 +364,213 @@ def send_appointment_reminder_email(appointment_id, user_email, user_name, docto
         except Exception as log_e:
             print(f"❌ Failed to log notification failure: {log_e}")
         return False
+
+
+def send_appointment_confirmation_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url):
+    """
+    Sends an email confirmation to the user for a booked appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Confirmed",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            Your appointment with Dr. {doctor_name} on {appointment_time_str} has been confirmed.
+            Meeting Link: {meeting_url}
+            Please ensure you are ready for the session.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Confirmation email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # Note: This might be the user booking, but for logging the action
+            "appointment_id": appointment_id,
+            "type": "appointment_confirmation",
+            "message": f"Confirmation email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send confirmation email for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_confirmation",
+                "message": f"Failed to send confirmation email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+def send_appointment_confirmed_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url):
+    """
+    Sends an email to the user when a doctor confirms their appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Confirmed by Doctor",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            Dr. {doctor_name} has confirmed your appointment scheduled for {appointment_time_str}.
+            Meeting Link: {meeting_url}
+            Please ensure you are ready for the session.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Confirmed by doctor email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # This might be the doctor's ID when called from the doctor's action
+            "appointment_id": appointment_id,
+            "type": "appointment_confirmed_by_doctor_email",
+            "message": f"Confirmation email sent to user for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send confirmed by doctor email for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_confirmed_by_doctor_email",
+                "message": f"Failed to send confirmed by doctor email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+def send_appointment_rejected_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
+    """
+    Sends an email to the user when a doctor rejects their appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Rejected by Doctor",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            Dr. {doctor_name} has rejected your appointment request scheduled for {appointment_time_str}.
+            Please try booking another time.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Rejected by doctor email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # This might be the doctor's ID when called from the doctor's action
+            "appointment_id": appointment_id,
+            "type": "appointment_rejected_by_doctor_email",
+            "message": f"Rejection email sent to user for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send rejected by doctor email for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_rejected_by_doctor_email",
+                "message": f"Failed to send rejected by doctor email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+
+def send_appointment_confirmed_to_doctor_email(appointment_id, doctor_email, user_name, doctor_name, appointment_time_str, meeting_url):
+    """
+    Sends an email notification to the doctor about a new booking.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] New Appointment Booked",
+            recipients=[doctor_email],
+            body=f"""
+            Dr. {doctor_name},
+            A new appointment has been booked with you by {user_name} on {appointment_time_str}.
+            Meeting Link: {meeting_url}
+            Please check your dashboard for details.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Confirmation email sent to doctor {doctor_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table for the doctor
+        supabase.table("notifications").insert({
+            "user_id": session.get("doctor_id"), # This might be the doctor booking, but for logging the action - adjust if called from user booking context
+            "appointment_id": appointment_id,
+            "type": "appointment_booked_doctor_notify",
+            "message": f"Notification email to doctor about appointment with {user_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send confirmation email to doctor for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("doctor_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_booked_doctor_notify",
+                "message": f"Failed to send notification email to doctor about appointment with {user_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+def create_notification(user_id, notification_type, message, channel="in_app", is_read=False):
+    """
+    Creates a notification entry in the Supabase 'notifications' table.
+    """
+    try:
+        supabase.table("notifications").insert({
+            "user_id": user_id,
+            "type": notification_type,
+            "message": message,
+            "channel": channel,
+            "is_read": is_read
+        }).execute()
+        print(f"✅ Notification '{notification_type}' created for user {user_id}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to create notification for user {user_id}: {e}")
+        return False
+
+
+
+
 # ============================================================
 # Utility Functions
 # ============================================================
@@ -1190,9 +1481,61 @@ def get_notification_count():
     except Exception as e:
         print(f"Error fetching notifications: {e}")
         return jsonify({"count": 0, "notifications": []})
+
+@app.route('/notifications/stream')
+@login_required
+def notifications_stream():
+    user_id = session.get("user_id")
+    if not user_id:
+        # Return an error or redirect if not logged in
+        return jsonify({"error": "Unauthorized"}), 401
+
+    def event_stream():
+        # This is a generator function that yields SSE data
+        while True:
+            try:
+                # Fetch the latest unread notifications for the user
+                # This is a simplified query - you might want to fetch only new ones since last check
+                # or use a more efficient method like listening to a Redis channel if using Redis pub/sub.
+                # For now, we'll fetch the most recent 5 unread notifications.
+                res = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(5).execute()
+                notifications = res.data if res.data else []
+
+                if notifications:
+                    # Send the list of notifications as a single event
+                    # Format the data for SSE
+                    import json
+                    data_str = json.dumps({"notifications": notifications})
+                    yield f"data: {data_str}\n\n"
+                    # Optional: Mark these specific notifications as 'read' here if desired
+                    # notification_ids = [n['id'] for n in notifications]
+                    # supabase.table("notifications").update({"is_read": True}).in_("id", notification_ids).execute()
+                else:
+                    # Send a heartbeat or an empty update to keep the connection alive
+                    yield f"data: {json.dumps({'notifications': []})}\n\n"
+
+                # Wait for a short period before checking again
+                time.sleep(10) # Check every 10 seconds (adjust as needed)
+
+            except GeneratorExit:
+                # This exception is raised when the client closes the connection
+                print(f"SSE connection closed for user {user_id}")
+                break
+            except Exception as e:
+                print(f"Error in SSE stream for user {user_id}: {e}")
+                # Optionally, send an error message to the client
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                time.sleep(5) # Wait a bit before retrying
+
+    # Return the generator as a streaming response with the correct content type
+    from flask import Response
+    return Response(event_stream(), mimetype="text/event-stream")
+
+
+
 @app.route("/api/messages/unread_count")
 def get_unread_message_count():
-    user_id = session.get("user_id")
+    user_id = session.get("id")
     if not user_id:
         return jsonify({"count": 0})
     try:
@@ -1818,6 +2161,108 @@ def reschedule_appointment(appointment_id):
     # Pass the appointment details and available slots to the template
     return render_template("reschedule_appointment.html", appointment=appointment, available_slots=available_calculated_slots)
 
+@app.route("/appointment/confirm/<appointment_id>", methods=["POST"])
+@login_required
+def confirm_appointment(appointment_id):
+    doctor_id = session.get("user_id") # For doctors, session user_id is their doctor ID
+    if not doctor_id or session.get("role") != "doctor":
+        flash("Access denied.", "danger")
+        return redirect(url_for("login"))
+
+    try:
+        # Fetch the appointment to check if it belongs to the doctor
+        appointment_data = supabase.table("appointments").select("*").eq("id", appointment_id).eq("doctor_id", doctor_id).single().execute()
+        appointment = appointment_data.data
+
+        if not appointment:
+            flash("Appointment not found or does not belong to you.", "danger")
+            return redirect(url_for("doctor_dashboard"))
+
+        # Check if status allows confirmation (e.g., not already confirmed/cancelled)
+        if appointment.get("status") != "pending":
+            flash("This appointment cannot be confirmed.", "warning")
+            return redirect(url_for("doctor_dashboard"))
+
+        # Update the appointment status to confirmed
+        supabase.table("appointments").update({"status": "confirmed"}).eq("id", appointment_id).execute()
+
+        # --- NEW: Send Confirmation Email to User ---
+        # Fetch user details for the email
+        user_id = appointment["user_id"]
+        user_details = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
+        # Fetch doctor details for the email
+        doctor_details = supabase.table("doctors").select("id, specialization").eq("id", doctor_id).single().execute().data
+        appointment_time_str = datetime.fromisoformat(appointment["appointment_time"]).strftime("%Y-%m-%d at %H:%M")
+        meeting_url = appointment.get("meeting_url", "N/A") # Use the existing meeting URL
+
+        user_name = user_details.get("name")
+        user_email = user_details.get("email")
+        doctor_name = doctor_details.get("specialization", "Unknown")
+
+        send_appointment_confirmed_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url)
+
+        # --- NEW: Send Notification to User ---
+        create_notification(user_id, "appointment_confirmed_by_doctor", f"Your appointment with Dr. {doctor_name} on {appointment_time_str} has been confirmed by the doctor.")
+
+        flash("Appointment confirmed successfully.", "success")
+    except Exception as e:
+        print(f"Error confirming appointment: {e}")
+        flash("Failed to confirm appointment. Please try again.", "danger")
+
+    # Redirect back to doctor dashboard
+    return redirect(url_for("doctor_dashboard"))
+
+@app.route("/appointment/reject/<appointment_id>", methods=["POST"])
+@login_required
+def reject_appointment(appointment_id):
+    doctor_id = session.get("user_id") # For doctors, session user_id is their doctor ID
+    if not doctor_id or session.get("role") != "doctor":
+        flash("Access denied.", "danger")
+        return redirect(url_for("login"))
+
+    try:
+        # Fetch the appointment to check if it belongs to the doctor
+        appointment_data = supabase.table("appointments").select("*").eq("id", appointment_id).eq("doctor_id", doctor_id).single().execute()
+        appointment = appointment_data.data
+
+        if not appointment:
+            flash("Appointment not found or does not belong to you.", "danger")
+            return redirect(url_for("doctor_dashboard"))
+
+        # Check if status allows rejection (e.g., not already confirmed/cancelled)
+        if appointment.get("status") != "pending":
+            flash("This appointment cannot be rejected.", "warning")
+            return redirect(url_for("doctor_dashboard"))
+
+        # Update the appointment status to cancelled (or rejected)
+        supabase.table("appointments").update({"status": "cancelled"}).eq("id", appointment_id).execute()
+
+        # --- NEW: Send Rejection Email to User ---
+        # Fetch user details for the email
+        user_id = appointment["user_id"]
+        user_details = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
+        # Fetch doctor details for the email
+        doctor_details = supabase.table("doctors").select("id, specialization").eq("id", doctor_id).single().execute().data
+        appointment_time_str = datetime.fromisoformat(appointment["appointment_time"]).strftime("%Y-%m-%d at %H:%M")
+
+        user_name = user_details.get("name")
+        user_email = user_details.get("email")
+        doctor_name = doctor_details.get("specialization", "Unknown")
+
+        send_appointment_rejected_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str)
+
+        # --- NEW: Send Notification to User ---
+        create_notification(user_id, "appointment_rejected_by_doctor", f"Your appointment with Dr. {doctor_name} on {appointment_time_str} has been rejected by the doctor.")
+
+        flash("Appointment rejected successfully.", "info") # Use 'info' for rejection
+    except Exception as e:
+        print(f"Error rejecting appointment: {e}")
+        flash("Failed to reject appointment. Please try again.", "danger")
+
+    # Redirect back to doctor dashboard
+    return redirect(url_for("doctor_dashboard"))
+
+
 
 # ============================================================
 # Routes - Subscription Management
@@ -2195,45 +2640,6 @@ def log_activity(user_id, plan_id, activity_type):
 # Routes - User Profile & Account Management
 # ============================================================
 
-
-def send_welcome_email_if_incomplete(user_id, email, name, role):
-    """Sends a welcome email if the user's profile is incomplete."""
-    if role != "doctor":
-        return  # Only for doctors
-
-    try:
-        # Fetch doctor-specific details to check completeness
-        doctor_data = supabase.table("doctors").select("bio, specialization, license_number").eq("id", user_id).single().execute().data
-        bio = doctor_data.get("bio", "").strip()
-        spec = doctor_data.get("specialization", "").strip()
-        license_num = doctor_data.get("license_number", "").strip()
-
-        if not bio or not spec or not license_num:
-            msg = Message(
-                subject="[CardioGuard] Welcome! Please Complete Your Profile",
-                recipients=[email],
-                body=f"""
-                Hi {name},
-
-                Welcome to CardioGuard! 🎉
-
-                To start accepting appointments, please complete your professional profile:
-                - Add your specialization
-                - Write a short bio
-                - Provide your license number
-                - Set your consultation fee
-
-                Visit your dashboard to get started:
-                {url_for('doctor_dashboard', _external=True)}
-
-                Best regards,
-                The CardioGuard Team
-                """
-            )
-            mail.send(msg)
-            print(f"✅ Welcome email sent to {email}")
-    except Exception as e:
-        print(f"Failed to check doctor profile completeness or send email: {e}")
 
 @app.route('/user/profile/edit', methods=['GET', 'POST'])
 @login_required

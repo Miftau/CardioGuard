@@ -148,42 +148,4 @@
     if (dropdown) dropdown.classList.toggle('hidden');
   }
 
-  // Load notifications (only if user is logged in)
-  document.addEventListener('DOMContentLoaded', () => {
-    // Only fetch if sidebar is present (i.e., user is logged in)
-    if (!document.getElementById('sidebar-container')) return;
-
-    fetch('{{ url_for("get_notification_count") }}')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => {
-        const list = document.getElementById('notification-list');
-        const badge = document.getElementById('notification-count-badge');
-        if (!list || !badge) return;
-
-        if (data.notifications?.length > 0) {
-          list.innerHTML = data.notifications.map(n => `
-            <div class="p-3 hover:bg-gray-50 border-b">
-              <p class="font-medium text-sm">${n.message || 'New notification'}</p>
-              <p class="text-xs text-gray-600 mt-1">${new Date(n.created_at).toLocaleString()}</p>
-            </div>
-          `).join('');
-          badge.textContent = data.count || data.notifications.length;
-          badge.classList.remove('hidden');
-        } else {
-          list.innerHTML = '<p class="p-4 text-center text-gray-500">No notifications</p>';
-          badge.classList.add('hidden');
-        }
-      })
-      .catch(() => {
-        const list = document.getElementById('notification-list');
-        if (list) list.innerHTML = '<p class="p-4 text-center text-gray-500">Failed to load</p>';
-      });
-  });
-
-  // Confirm delete
-  function confirmDelete() {
-    if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
-      window.location.href = "{{ url_for('delete_account') }}";
-    }
-  }
 </script>

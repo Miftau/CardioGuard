@@ -148,6 +148,16 @@
                   {% else %}
                     <span class="text-gray-400 text-sm">N/A</span>
                   {% endif %}
+                  {% if appt.status == 'pending' %}
+                    <div class="flex space-x-2 mt-2"> <!-- Added mt-2 for spacing below meeting link -->
+                      <form method="POST" action="{{ url_for('confirm_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to confirm this appointment?');">
+                        <button type="submit" class="text-green-500 hover:text-green-700 font-medium text-sm">Confirm</button>
+                      </form>
+                      <form method="POST" action="{{ url_for('reject_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to reject this appointment?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Reject</button>
+                      </form>
+                    </div>
+                  {% endif %}
                   <!-- Example action: view details or update status (placed after meeting link) -->
                   <!-- <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm ml-2">View Details</a> -->
                 </td>
