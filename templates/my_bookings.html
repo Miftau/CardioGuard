@@ -68,25 +68,20 @@
                   </span>
                 </td>
                 <td class="py-3 px-4">
-                  <!-- NEW: Join Meeting Button -->
-                  {% if a.meeting_url %}
-                    <!-- Example: Show button if appointment is within 30 mins of start time -->
-                    {% set appt_time = a.appointment_time | datetime_from_iso %}
-                    {% set now = now() %}
-                    <!-- NEW: Convert now() to timezone-aware UTC to match appt_time -->
-                    {% set now_aware = now.replace(tzinfo=appt_time.tzinfo) %}
-                    {% if now_aware >= appt_time and now_aware <= appt_time + timedelta(minutes=30) %}
-                        <a href="{{ a.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
-                    {% else %}
-                        <!-- Optionally, show a countdown or just the link -->
-                        <!-- For now, just show the link text if not within the window -->
-                        Meeting Link Ready
-                    {% endif %}
+                   <!-- Manage Appointment Actions -->
+                  {% if a.status == 'pending' %}
+                    <div class="flex space-x-2">
+                      <a href="{{ url_for('reschedule_appointment', appointment_id=appt.id) }}" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Reschedule</a>
+                      <form method="POST" action="{{ url_for('cancel_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to cancel this appointment?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Cancel</button>
+                      </form>
+                    </div>
+                  {% elif a.status == 'confirmed' %}
+                    <!--  Chat Link for Confirmed Appointments (points to new route) -->
+                    <a href="{{ url_for('appointment_chat', appointment_id=appt.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
                   {% else %}
-                    <span class="text-gray-400 text-sm">N/A</span>
+                    <span class="text-gray-400 text-sm">{{ a.status | title }}</span>
                   {% endif %}
-                  <!-- Example action: view details or cancel (if allowed) (placed after meeting link) -->
-                  <!-- <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm ml-2">View Details</a> -->
                 </td>
               </tr>
               {% endfor %}

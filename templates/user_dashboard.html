@@ -200,20 +200,40 @@
                   </span>
                 </td>
                 <td class="py-3 px-4">
-                  <!-- Manage Appointment Actions -->
+                  <!-- NEW: Join Meeting Button -->
+                  {% if appt.meeting_url %}
+                    <!-- Example: Show button if appointment is within 30 mins of start time -->
+                    {% set appt_time = appt.appointment_time | datetime_from_iso %}
+                    {% set now = now() %}
+                    <!-- NEW: Convert now() to timezone-aware UTC to match appt_time -->
+                    {% set now_aware = now.replace(tzinfo=appt_time.tzinfo) %}
+                    {% if now_aware >= appt_time and now_aware <= appt_time + timedelta(minutes=30) %}
+                        <a href="{{ appt.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
+                    {% elif appt.status in ['confirmed', 'pending'] %}
+                        <!-- Show a general link or text indicating the link is ready -->
+                        <span class="text-gray-500 text-sm">Meeting Link Ready</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-gray-400 text-sm">N/A</span>
+                  {% endif %}
+                  <!-- NEW: Confirm/Reject buttons for pending appointments -->
                   {% if appt.status == 'pending' %}
-                    <div class="flex space-x-2">
-                      <a href="{{ url_for('reschedule_appointment', appointment_id=appt.id) }}" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Reschedule</a>
-                      <form method="POST" action="{{ url_for('cancel_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to cancel this appointment?');">
-                        <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Cancel</button>
+                    <div class="flex space-x-2 mt-2"> <!-- Added mt-2 for spacing below meeting link -->
+                      <form method="POST" action="{{ url_for('confirm_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to confirm this appointment?');">
+                        <button type="submit" class="text-green-500 hover:text-green-700 font-medium text-sm">Confirm</button>
+                      </form>
+                      <form method="POST" action="{{ url_for('reject_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to reject this appointment?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Reject</button>
                       </form>
                     </div>
                   {% elif appt.status == 'confirmed' %}
-                    <!--  Chat Link for Confirmed Appointments (points to new route) -->
-                    <a href="{{ url_for('appointment_chat', appointment_id=appt.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
-                  {% else %}
-                    <span class="text-gray-400 text-sm">{{ appt.status | title }}</span>
+                    <!-- NEW: Chat Link for Confirmed Appointments -->
+                    <div class="mt-2"> <!-- Added mt-2 for spacing below meeting link -->
+                      <a href="{{ url_for('appointment_chat', appointment_id=appt.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
+                    </div>
                   {% endif %}
+                  <!-- Example action: view details or update status (placed after meeting link) -->
+                  <!-- <a href="#" class="text-red-500 hover:text-red-700 font-medium text-sm ml-2">View Details</a> -->
                 </td>
               </tr>
               {% endfor %}
@@ -341,3 +361,4 @@ new Chart(ctx, {
 });
 </script>
 {% endblock %}
+                
