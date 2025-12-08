@@ -1546,97 +1546,111 @@ def get_unread_message_count():
     except Exception as e:
         print(f"Error fetching message count: {e}")
         return jsonify({"count": 0})
+
+
 @app.route("/messages")
 @app.route("/messages/<conversation_id>")
 @login_required
 def messages_page(conversation_id=None):
-    user_id = session.get("user_id")
+    user_id = session.get("id")
+
     # 1. Fetch list of conversations (users interacted with)
-    # This is complex in Supabase without a dedicated 'conversations' table.
-    # We'll try to fetch distinct senders/receivers from messages.
-    # For simplicity, we might just list doctors if user is patient, or patients if user is doctor.
-    # Or we can query unique user IDs from messages where user is sender or receiver.
     conversations = []
     active_conversation_user = None
     messages = []
+
     try:
-        # Simplified approach: If user is patient, show doctors they have appointments with.
-        # If user is doctor, show patients.
-        # AND show anyone they have exchanged messages with.
-        # Let's just fetch recent messages to find conversation partners
-        sent = supabase.table("messages").select("receiver_id").eq("sender_id", user_id).execute()
-        received = supabase.table("messages").select("sender_id").eq("receiver_id", user_id).execute()
+        # Simplified approach: Get distinct users the current user has chatted with
+        # This assumes a 'messages' table with sender_id and receiver_id
+        sent_messages = supabase.table("messages").select("receiver_id").eq("sender_id", user_id).execute()
+        received_messages = supabase.table("messages").select("sender_id").eq("receiver_id", user_id).execute()
+
         contact_ids = set()
-        if sent.data:
-            contact_ids.update([m['receiver_id'] for m in sent.data])
-        if received.data:
-            contact_ids.update([m['sender_id'] for m in received.data])
-        # Also add booked appointments participants
-        if session.get("role") == "doctor":
-            # Find patients
-            # (Assuming 'appointments' table exists and links doctor_id (which is user_id here?) to user_id)
-            pass 
+        if sent_messages.data:
+            contact_ids.update([m['receiver_id'] for m in sent_messages.data])
+        if received_messages.data:
+            contact_ids.update([m['sender_id'] for m in received_messages.data])
+
+        # Also include users from appointments if you want to pre-populate contacts
+        # This part is optional and depends on your business logic
+        # For example, if user is patient, add their doctors
+        if session.get("role") == "user":
+            appt_data = supabase.table("appointments").select("doctor_id").eq("user_id", user_id).execute()
+            if appt_data.data:
+                contact_ids.update([appt["doctor_id"] for appt in appt_data.data])
+        elif session.get("role") == "doctor":
+            appt_data = supabase.table("appointments").select("user_id").eq("doctor_id", user_id).execute()
+            if appt_data.data:
+                contact_ids.update([appt["user_id"] for appt in appt_data.data])
+
         # Fetch user details for these contacts
         if contact_ids:
-            # Supabase 'in' query
             users_res = supabase.table("users").select("id, name, email").in_("id", list(contact_ids)).execute()
             for u in users_res.data:
+                # Get last message time and content for display
+                last_msg_res = supabase.table("messages").select("*").or_(f"sender_id.eq.{u['id']},receiver_id.eq.{u['id']}").eq("sender_id", user_id).eq("receiver_id", u['id']).order("created_at", desc=True).limit(1).execute()
+                last_msg = last_msg_res.data[0] if last_msg_res.data else None
                 conversations.append({
                     "other_user_id": u['id'],
                     "other_user_name": u['name'],
-                    "last_message_time": "", # To be filled
-                    "last_message_content": "Click to view chat"
+                    "last_message_time": last_msg['created_at'] if last_msg else "",
+                    "last_message_content": last_msg['content'] if last_msg else "No messages yet."
                 })
-        # If conversation_id is provided, load messages
+
+        # If conversation_id is provided, load messages for that specific conversation
         if conversation_id:
-            # Get user details
+            # Get user details for the conversation partner
             u_res = supabase.table("users").select("name, email").eq("id", conversation_id).single().execute()
             if u_res.data:
                 active_conversation_user = u_res.data
-            # Fetch messages
-            # (sender = me AND receiver = them) OR (sender = them AND receiver = me)
-            # Supabase doesn't support OR easily in one query like that without raw SQL or stored procedures usually, 
-            # but let's try .or_ syntax if available or two queries.
-            # Query 1: Sent by me
-            m1 = supabase.table("messages").select("*").eq("sender_id", user_id).eq("receiver_id", conversation_id).execute()
-            # Query 2: Sent by them
-            m2 = supabase.table("messages").select("*").eq("sender_id", conversation_id).eq("receiver_id", user_id).execute()
-            all_msgs = (m1.data or []) + (m2.data or [])
-            # Sort by created_at
-            all_msgs.sort(key=lambda x: x['created_at'])
+
+            # Fetch messages for this conversation
+            # Use 'or_' for sender/receiver to get both sent and received messages
+            # Supabase's Python client might require two queries for OR logic on different columns
+            sent_messages = supabase.table("messages").select("*").eq("sender_id", user_id).eq("receiver_id", conversation_id).order("created_at").execute().data or []
+            received_messages = supabase.table("messages").select("*").eq("sender_id", conversation_id).eq("receiver_id", user_id).order("created_at").execute().data or []
+            # Combine and sort messages by created_at
+            all_msgs = sorted(sent_messages + received_messages, key=lambda x: x['created_at'])
             messages = all_msgs
+
             # Mark as read
-            if m2.data:
-                unread_ids = [m['id'] for m in m2.data if not m.get('is_read')]
+            try:
+                unread_ids = [m['id'] for m in received_messages if not m.get('is_read')]
                 if unread_ids:
                     supabase.table("messages").update({"is_read": True}).in_("id", unread_ids).execute()
+            except Exception as e:
+                print(f"Error marking messages as read: {e}")
+
     except Exception as e:
         print(f"Error loading messages: {e}")
         flash("Error loading messages.", "danger")
-    return render_template(
-        "messages.html",
-        conversations=conversations,
-        active_conversation_id=conversation_id,
-        active_conversation_user=active_conversation_user,
-        messages=messages
-    )
+
+    # Pass data to the template
+    return render_template("messages.html",
+                           conversations=conversations,
+                           active_conversation_user=active_conversation_user,
+                           messages=messages)
+
 @app.route("/messages/send", methods=["POST"])
 @login_required
 def send_message():
     sender_id = session.get("user_id")
     receiver_id = request.form.get("receiver_id")
     content = request.form.get("content")
+
     if not receiver_id or not content:
         flash("Message cannot be empty.", "warning")
         return redirect(url_for("messages_page", conversation_id=receiver_id))
+
     try:
-        # Insert message
+        # Insert message into the 'messages' table
         supabase.table("messages").insert({
             "sender_id": sender_id,
             "receiver_id": receiver_id,
             "content": content
         }).execute()
-        # Send Email Notification
+
+        # Send Email Notification (optional)
         # Fetch receiver email
         receiver_data = supabase.table("users").select("email, name").eq("id", receiver_id).single().execute()
         if receiver_data.data:
@@ -1646,26 +1660,34 @@ def send_message():
                 msg = Message(
                     subject="[CardioGuard] New Message",
                     recipients=[receiver_email],
-                    body=f"""
-                    Hello {receiver_name},
-                    You have received a new message from {session.get('user_name', 'a user')} on CardioGuard.
-                    "{content}"
-                    Log in to reply: {url_for('login', _external=True)}
-                    """
+                    body=f"""Hello {receiver_name},
+
+You have received a new message from {session.get('user_name', 'a user')} on CardioGuard.
+
+"{content}"
+
+Log in to reply: {url_for('login', _external=True)}
+"""
                 )
                 mail.send(msg)
             except Exception as e:
-                print(f"Failed to send email notification: {e}")
-        # Create in-app notification
+                print("Error sending email notification:", e)
+
+        # Create in-app notifications
         supabase.table("notifications").insert({
             "user_id": receiver_id,
             "message": f"New message from {session.get('user_name')}",
             "type": "message"
         }).execute()
+
+        flash("Message sent!", "success")
     except Exception as e:
         print(f"Error sending message: {e}")
         flash("Failed to send message.", "danger")
+
     return redirect(url_for("messages_page", conversation_id=receiver_id))
+
+
 @app.route("/chat", methods=["GET", "POST"])
 @login_required
 def chat():
