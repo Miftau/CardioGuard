@@ -7,20 +7,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- Tailwind -->
-    <script src="https://cdn.tailwindcss.com  "></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/libs/font-awesome/6.4.0/css/all.min.css  ">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- AOS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css  ">
-    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js  "></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css">
+    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
 
     <!-- Favicon -->
-    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966488.png  ">
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966488.png">
 
     <!-- Preload heartbeat sound (optional) -->
-    <link rel="preload" href="https://assets.mixkit.co/sfx/preview/mixkit-heartbeat-747.mp3  " as="audio">
+    <link rel="preload" href="https://assets.mixkit.co/sfx/preview/mixkit-heartbeat-747.mp3" as="audio">
 
     <!-- ---------------------------------------------------- -->
     <!--  DARK MODE & NAVBAR JS (only one copy)               -->
@@ -266,9 +266,9 @@
 
                         <!-- External Apps (small icons on desktop) -->
                         <div class="flex space-x-3 text-gray-600 dark:text-gray-400">
-                            <a href="https://renalguard.onrender.com    " target="_blank" title="RenalGuard"
+                            <a href="https://renalguard.onrender.com  " target="_blank" title="RenalGuard"
                             class="text-xl hover:text-green-500 transition">Kidney</a>
-                            <a href="https://hepaguard.onrender.com    " target="_blank" title="HepaGuard"
+                            <a href="https://hepaguard.onrender.com  " target="_blank" title="HepaGuard"
                             class="text-xl hover:text-yellow-600 transition">Liver</a>
                         </div>
 
@@ -378,8 +378,8 @@
 
                     <li class="pt-4 border-t border-gray-300 dark:border-gray-600">
                         <div class="flex gap-4 text-2xl">
-                            <a href="https://renalguard.onrender.com    " target="_blank" class="text-green-600">Kidney</a>
-                            <a href="https://hepaguard.onrender.com    " target="_blank" class="text-yellow-600">Liver</a>
+                            <a href="https://renalguard.onrender.com  " target="_blank" class="text-green-600">Kidney</a>
+                            <a href="https://hepaguard.onrender.com  " target="_blank" class="text-yellow-600">Liver</a>
                         </div>
                     </li>
 
@@ -607,54 +607,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             fetchCounts();
             setInterval(fetchCounts, 30000);
-
-            // --- NEW: Server-Sent Events (SSE) for Real-Time Notifications ---
-            console.log("Initializing real-time notifications...");
-            const eventSource = new EventSource('/notifications/stream');
-
-            eventSource.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.notifications && data.notifications.length > 0) {
-                        console.log("Received new notifications via SSE:", data.notifications);
-                        // Trigger a fetch to the existing API endpoint to get the correct count and potentially update UI
-                        fetch('/api/notifications/count')
-                            .then(response => response.json())
-                            .then(newData => {
-                                const badge = document.getElementById('notification-count-badge');
-                                if (newData.count > 0) {
-                                    badge.textContent = Math.min(newData.count, 99);
-                                    badge.classList.remove('hidden');
-                                    // Optional: Show a visual indicator or toast for new notifications
-                                    // Example: Show a simple alert or use a library like Toastr
-                                    // alert(`You have ${newData.count} new notifications!`);
-                                    // Or update a dropdown list of notifications if you have one
-                                    // updateNotificationDropdown(newData.notifications); // Call a function to update the UI
-                                } else {
-                                    badge.classList.add('hidden');
-                                }
-                            })
-                            .catch(err => console.error('Error fetching notification count after SSE:', err));
-                    } else {
-                        // Received an empty update (e.g., heartbeat) - can be useful for debugging connection
-                        // console.log("SSE heartbeat received, connection alive.");
-                    }
-                } catch (e) {
-                    console.error("Error parsing SSE message:", event.data);
-                }
-            };
-
-            eventSource.onerror = function(event) {
-                if (event.eventPhase === EventSource.CLOSED) {
-                    console.log("SSE connection closed.");
-                    // Optionally, attempt to reconnect after a delay
-                    // setTimeout(() => new EventSource('/notifications/stream'), 5000);
-                } else {
-                    console.error("SSE connection error:", event);
-                    // Optionally, attempt to reconnect after a delay
-                    // setTimeout(() => new EventSource('/notifications/stream'), 5000);
-                }
-            };
         });
     </script>
     {% endif %}
