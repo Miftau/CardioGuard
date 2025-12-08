@@ -112,6 +112,81 @@
 </button>
 
 <script>
+  async function fetchCounts() {
+            try {
+                const notifRes = await fetch('/api/notifications/count');
+                const notifData = await notifRes.json();
+                const badge = document.getElementById('notification-count-badge');
+                if (notifData.count > 0) {
+                    badge.textContent = Math.min(notifData.count, 99);
+                    badge.classList.remove('hidden');
+                } else badge.classList.add('hidden');
+
+                const msgRes = await fetch('/api/messages/unread_count');
+                const msgData = await msgRes.json();
+                const msgBadge = document.getElementById('message-count-badge');
+                if (msgData.count > 0) {
+                    msgBadge.textContent = Math.min(msgData.count, 99);
+                    msgBadge.classList.remove('hidden');
+                } else msgBadge.classList.add('hidden');
+            } catch (e) { console.warn('Notification fetch failed', e); }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchCounts();
+            setInterval(fetchCounts, 30000);        
+            // --- NEW: Server-Sent Events (SSE) for Real-Time Notifications ---
+            console.log("Initializing real-time notifications...");
+            const eventSource = new EventSource('/notifications/stream');
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.notifications && data.notifications.length > 0) {
+                        console.log("Received new notifications via SSE:", data.notifications);
+                        // Trigger a fetch to the existing API endpoint to get the correct count and potentially update UI
+                        fetch('/api/notifications/count')
+                            .then(response => response.json())
+                            .then(newData => {
+                                const badge = document.getElementById('notification-count-badge');
+                                if (newData.count > 0) {
+                                    badge.textContent = Math.min(newData.count, 99);
+                                    badge.classList.remove('hidden');
+                                    // Optional: Show a visual indicator or toast for new notifications
+                                    // Example: Show a simple alert or use a library like Toastr
+                                    // alert(`You have ${newData.count} new notifications!`);
+                                    // Or update a dropdown list of notifications if you have one
+                                    // updateNotificationDropdown(newData.notifications); // Call a function to update the UI
+                                } else {
+                                    badge.classList.add('hidden');
+                                }
+                            })
+                            .catch(err => console.error('Error fetching notification count after SSE:', err));
+                    } else {
+                        // Received an empty update (e.g., heartbeat) - can be useful for debugging connection
+                        // console.log("SSE heartbeat received, connection alive.");
+                    }
+                } catch (e) {
+                    console.error("Error parsing SSE message:", event.data);
+                }
+            };
+
+            eventSource.onerror = function(event) {
+                if (event.eventPhase === EventSource.CLOSED) {
+                    console.log("SSE connection closed.");
+                    // Optionally, attempt to reconnect after a delay
+                    // setTimeout(() => new EventSource('/notifications/stream'), 5000);
+                } else {
+                    console.error("SSE connection error:", event);
+                    // Optionally, attempt to reconnect after a delay
+                    // setTimeout(() => new EventSource('/notifications/stream'), 5000);
+                }
+            };
+        });
+</script>
+
+
+<script>
   // Toggle sidebar on mobile
   const sidebar = document.getElementById('sidebar-container');
   const overlay = document.getElementById('sidebar-overlay');
