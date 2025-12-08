@@ -1687,6 +1687,28 @@ Log in to reply: {url_for('login', _external=True)}
 
     return redirect(url_for("messages_page", conversation_id=receiver_id))
 
+@app.route("/api/users/search")
+@login_required
+def search_users():
+    user_id = session.get("user_id")
+    query = request.args.get("q", "").strip().lower()
+
+    if not query:
+        return jsonify({"users": []})
+
+    try:
+        # Search for users by name or email (excluding the current user)
+        # Adjust the search logic as needed (e.g., only search doctors if current user is a patient)
+        # This is a basic example using 'ilike' for case-insensitive partial matching
+        # Be careful with performance for large user bases; consider indexing.
+        res = supabase.table("users").select("id, name, email").neq("id", user_id).or_(f"name.ilike.%{query}%,email.ilike.%{query}%").limit(10).execute()
+        users = res.data if res.data else []
+        # Filter out users based on role if necessary (e.g., patient can only search doctors)
+        # For now, return all matching users except the current one
+        return jsonify({"users": users})
+    except Exception as e:
+        print(f"Error searching users: {e}")
+        return jsonify({"users": []}), 500
 
 @app.route("/chat", methods=["GET", "POST"])
 @login_required

@@ -25,7 +25,7 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Left Panel: Conversations & Search -->
+      <!-- Left Panel: Search & Conversations -->
       <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 h-[70vh] flex flex-col">
         <!-- Search Bar -->
         <div class="mb-4">
@@ -38,11 +38,17 @@
           />
         </div>
 
+        <!-- Search Results (Initially hidden) -->
+        <div id="searchResultsContainer" class="flex-1 overflow-y-auto hidden">
+          <!-- Search results will be populated here by JavaScript -->
+        </div>
+
         <!-- Conversations List -->
         <div id="conversationsContainer" class="flex-1 overflow-y-auto">
+          <h3 class="text-lg font-semibold text-gray-700 mb-2">Recent Conversations</h3>
           {% if conversations %}
             {% for conv in conversations %}
-              <div class="p-3 border-b border-gray-200 hover:bg-gray-50 cursor-pointer" onclick="loadConversation('{{ conv.other_user_id }}', '{{ conv.other_user_name }}')">
+              <div class="p-3 border-b border-gray-200 hover:bg-gray-50 cursor-pointer" onclick="loadConversation('{{ conv.other_user_id }}')">
                 <div class="flex items-center">
                   <div class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600">
                     <i class="fas fa-user"></i>
@@ -55,11 +61,8 @@
               </div>
             {% endfor %}
           {% else %}
-            <div class="text-center py-8">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p class="text-gray-600">No conversations yet.</p>
+            <div class="text-center py-4">
+              <p class="text-gray-600">No recent conversations.</p>
             </div>
           {% endif %}
         </div>
@@ -89,20 +92,23 @@
           </div>
 
           <!-- Chat Input Area -->
-          <form method="POST" class="flex gap-2">
-            <input
-              type="text"
-              name="content"
-              placeholder="Type your message..."
-              class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
-              required
-            />
-            <button
-              type="submit"
-              class="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-2 rounded-lg hover:from-red-600 hover:to-red-700 shadow-md transition duration-300"
-            >
-              Send
-            </button>
+          <form method="POST" action="{{ url_for('send_message') }}"> <!-- Ensure action points to send_message -->
+            <input type="hidden" name="receiver_id" value="{{ active_conversation_user.id }}"> <!-- Pass receiver ID -->
+            <div class="flex gap-2">
+              <input
+                type="text"
+                name="content"
+                placeholder="Type your message..."
+                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400"
+                required
+              />
+              <button
+                type="submit"
+                class="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-2 rounded-lg hover:from-red-600 hover:to-red-700 shadow-md transition duration-300"
+              >
+                Send
+              </button>
+            </div>
           </form>
         {% else %}
           <div class="flex-1 flex items-center justify-center">
@@ -110,7 +116,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p class="text-gray-600">Select a user to start chatting.</p>
+              <p class="text-gray-600">Select a user or search to start chatting.</p>
             </div>
           </div>
         {% endif %}
@@ -123,22 +129,61 @@
 // JavaScript for dynamic search and conversation loading
 function searchUsers() {
     const searchTerm = document.getElementById('searchUsers').value.toLowerCase();
-    const conversationItems = document.querySelectorAll('#conversationsContainer .cursor-pointer');
+    const searchResultsContainer = document.getElementById('searchResultsContainer');
+    const conversationsContainer = document.getElementById('conversationsContainer');
 
-    conversationItems.forEach(item => {
-        const userName = item.textContent.toLowerCase();
-        if (userName.includes(searchTerm)) {
-            item.style.display = 'block';
-        } else {
-            item.style.display = 'none';
-        }
-    });
+    if (searchTerm.trim() === '') {
+        // If search is empty, show conversations again
+        searchResultsContainer.classList.add('hidden');
+        conversationsContainer.classList.remove('hidden');
+        return;
+    }
+
+    // Show search results container, hide conversations
+    conversationsContainer.classList.add('hidden');
+    searchResultsContainer.classList.remove('hidden');
+
+    // Clear previous results
+    searchResultsContainer.innerHTML = '';
+
+    // Simulate fetching search results (replace with actual fetch call)
+    // This is a placeholder - you need to implement the backend endpoint
+    fetch(`/api/users/search?q=${encodeURIComponent(searchTerm)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.users && data.users.length > 0) {
+                data.users.forEach(user => {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'p-3 border-b border-gray-200 hover:bg-gray-50 cursor-pointer';
+                    userDiv.innerHTML = `
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="ml-3">
+                                <p class="font-medium text-gray-800">${user.name}</p>
+                                <p class="text-gray-500 text-sm">${user.email}</p>
+                            </div>
+                        </div>
+                    `;
+                    userDiv.onclick = () => loadConversation(user.id); // Navigate to chat with this user
+                    searchResultsContainer.appendChild(userDiv);
+                });
+            } else {
+                searchResultsContainer.innerHTML = '<div class="text-center py-4"><p class="text-gray-600">No users found.</p></div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error searching users:', error);
+            searchResultsContainer.innerHTML = '<div class="text-center py-4"><p class="text-red-500">Error searching users.</p></div>';
+        });
 }
 
-function loadConversation(userId, userName) {
-    // This function would typically use AJAX to fetch the conversation messages
-    // For now, it will redirect to a specific route that loads the conversation
-    window.location.href = "{{ url_for('messages_page', conversation_id=userId) }}";
+function loadConversation(userId) {
+    // Navigate to the specific conversation route
+    window.location.href = "{{ url_for('messages_page', conversation_id='') }}".replace('/messages/', '/messages/') + userId;
+    // Or more robustly:
+    // window.location.href = `/messages/${userId}`;
 }
 </script>
 {% endblock %}
