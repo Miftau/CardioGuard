@@ -2569,7 +2569,8 @@ def doctor_dashboard():
         profile=profile_info,
         availability_slots=availability_slots,
         booked_appointments=booked_appointments,
-        patient_details=patient_details
+        patient_details=patient_details,
+        timedelta=timedelta
     )
     
     
@@ -2690,7 +2691,8 @@ def user_dashboard():
         appointments=appointments, # Pass appointments to the template
         doctor_details=doctor_details, # Pass doctor details for the template
         user_subscriptions=user_subscriptions, # Pass subscriptions to the template
-        current_plan_is_free=current_plan_is_free # Pass plan status for UI
+        current_plan_is_free=current_plan_is_free, # Pass plan status for UI
+        timedelta=timedelta
     )
 @app.route("/admin/dashboard")
 @login_required
@@ -2788,7 +2790,8 @@ def admin_dashboard():
         appt_activity_data=json.dumps(appt_activity_data),
         # Pass subscription data for admin
         user_subscriptions=user_subscriptions,
-        user_lookup_for_subs=user_lookup_for_subs
+        user_lookup_for_subs=user_lookup_for_subs,
+        timedelta=timedelta
     )
 def log_activity(user_id, plan_id, activity_type):
     supabase.table("user_subscription_activity").insert({
