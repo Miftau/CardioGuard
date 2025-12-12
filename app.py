@@ -1274,12 +1274,19 @@ def auth_callback(provider):
 @app.route("/")
 def index():
     return render_template("index.html")
+
 @app.route("/about")
 def about():
     return render_template("about.html")
+
 @app.route("/resources")
 def resources():
     return render_template("resources.html")
+
+@app.route('/pitch')
+def pitch():
+    return render_template('pitch.html')
+
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "POST":

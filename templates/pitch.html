@@ -1,0 +1,1248 @@
+{% extends 'base.html' %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<style>
+    :root {
+        --primary: #dc2626;
+        --secondary: #ea580c;
+        --accent: #0ea5e9;
+        --dark: #1e293b;
+        --light: #f8fafc;
+    }
+    .gradient-bg {
+        background: linear-gradient(135deg, var(--primary) 0%, #f97316 100%);
+    }
+    .stat-card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        overflow: hidden;
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 15px rgba(0,0,0,0.1);
+    }
+    .feature-icon {
+        width: 70px;
+        height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgba(220, 38, 38, 0.1);
+        color: var(--primary);
+        font-size: 24px;
+    }
+    .section-divider {
+        height: 4px;
+        width: 60px;
+        background: var(--primary);
+        margin: 0 auto 2rem;
+        border-radius: 2px;
+    }
+    .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        position: relative;
+        /* Increased height for charts that need more space */
+        height: 500px;
+        min-height: 300px;
+    }
+    /* Specific height increases for problematic charts */
+    #marketGrowthChart-container .chart-container,
+    #financialProjectionChart-container .chart-container {
+        height: 600px;
+    }
+    .chart-wrapper {
+        position: relative;
+        height: 100% !important;
+        width: 100% !important;
+        min-height: 100% !important;
+    }
+    canvas {
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 100% ;
+    }
+    .competitive-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .future-tag {
+        display: inline-block;
+        background: #fef3c7;
+        color: #92400e;
+        padding: 0.25rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+    }
+    /* Navigation improvements */
+    .nav-link {
+        position: relative;
+        padding: 0.5rem 0;
+    }
+    .nav-link::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 0;
+        height: 2px;
+        background: var(--primary);
+        transition: width 0.3s ease;
+    }
+    .nav-link:hover::after {
+        width: 100%;
+    }
+    /* Button animations */
+    .btn-pulse {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+        }
+    }
+    .scale-hover {
+        transition: transform 0.3s ease;
+    }
+    .scale-hover:hover {
+        transform: scale(1.05);
+    }
+    /* Feature cards */
+    .feature-card {
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+    }
+    .feature-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-5px);
+    }
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 300px;
+            padding: 1rem;
+            min-height: 250px;
+        }
+        #marketGrowthChart-container .chart-container,
+        #financialProjectionChart-container .chart-container {
+            height: 400px;
+        }
+        .chart-wrapper {
+            min-height: 250px;
+        }
+    }
+    /* Loading state for charts */
+    .chart-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #6b7280;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<!-- Navigation -->
+<nav class="bg-white shadow-sm sticky top-0 z-50 border-b border-gray-100">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <div class="bg-red-100 p-2 rounded-lg">
+                <i class="fas fa-heartbeat text-red-600 text-xl"></i>
+            </div>
+            <span class="font-bold text-2xl bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">CardioGuard</span>
+        </div>
+        <div class="hidden md:flex space-x-8 items-center">
+            <a href="#problem" class="nav-link text-gray-700 hover:text-red-600 transition font-medium">Problem</a>
+            <a href="#features" class="nav-link text-gray-700 hover:text-red-600 transition font-medium">Features</a>
+            <a href="#market" class="nav-link text-gray-700 hover:text-red-600 transition font-medium">Market</a>
+            <a href="#business" class="nav-link text-gray-700 hover:text-red-600 transition font-medium">Business</a>
+            <a href="#financials" class="nav-link text-gray-700 hover:text-red-600 transition font-medium">Financials</a>
+            <a href="/login" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-6 rounded-lg transition duration-300 scale-hover">
+                Live Demo
+            </a>
+        </div>
+    </div>
+</nav>
+<!-- Hero Section -->
+<section class="bg-gradient-to-br from-red-50 via-white to-orange-50 py-20 border-b overflow-hidden">
+    <div class="container mx-auto px-4 text-center max-w-4xl">
+        <div class="inline-block bg-gradient-to-r from-red-100 to-orange-100 px-6 py-2 rounded-full mb-6">
+            <span class="text-red-600 font-semibold">🚀 Launching Soon</span>
+        </div>
+        <h1 class="text-5xl md:text-6xl font-bold mb-6" data-aos="fade-up">
+            <span class="bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">Complete AI-Powered</span>
+            <br>
+            <span class="text-gray-800">Cardiac Healthcare Platform</span>
+        </h1>
+        <p class="text-xl mb-8 max-w-2xl mx-auto text-gray-600" data-aos="fade-up" data-aos-delay="100">
+            Predictive analytics + AI health consultant + Telemedicine + Community support in one integrated platform
+        </p>
+        <div class="flex flex-col sm:flex-row justify-center gap-4" data-aos="fade-up" data-aos-delay="200">
+            <a href="/login" class="bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold py-4 px-8 rounded-xl inline-block transition duration-300 btn-pulse scale-hover shadow-lg">
+                <i class="fas fa-play-circle mr-2"></i> Try Live Demo
+            </a>
+            <a href="#features" class="bg-white hover:bg-gray-50 text-red-500 border-2 border-red-500 font-bold py-4 px-8 rounded-xl text-center transition-all duration-300 hover:border-red-600 hover:shadow-lg shadow-md scale-hover">
+                <i class="fas fa-star mr-2"></i> Explore Features
+            </a>
+        </div>
+        <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto" data-aos="fade-up" data-aos-delay="300">
+            <div class="text-center p-4">
+                <div class="text-3xl font-bold text-red-600">94%</div>
+                <div class="text-gray-600 text-sm">Prediction Accuracy</div>
+            </div>
+            <div class="text-center p-4">
+                <div class="text-3xl font-bold text-red-600">24/7</div>
+                <div class="text-gray-600 text-sm">AI Health Assistant</div>
+            </div>
+            <div class="text-center p-4">
+                <div class="text-3xl font-bold text-red-600">5-min</div>
+                <div class="text-gray-600 text-sm">Doctor Appointments</div>
+            </div>
+            <div class="text-center p-4">
+                <div class="text-3xl font-bold text-red-600">100%</div>
+                <div class="text-gray-600 text-sm">Telehealth Integrated</div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Mission & Vision -->
+<section class="py-20 bg-white">
+    <div class="container mx-auto px-4 max-w-5xl">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Our Healthcare Revolution</h2>
+        <p class="text-center text-gray-600 max-w-3xl mx-auto mb-12" data-aos="fade-up" data-aos-delay="100">
+            We're building Africa's first comprehensive AI-driven cardiac care platform that goes beyond predictions to actual care delivery
+        </p>
+        <div class="grid md:grid-cols-2 gap-8 mt-12">
+            <div class="bg-gradient-to-br from-red-50 to-white p-8 rounded-2xl border border-red-100 shadow-sm" data-aos="fade-right">
+                <div class="flex items-center mb-6">
+                    <div class="bg-red-100 p-3 rounded-xl mr-4">
+                        <i class="fas fa-bullseye text-red-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-800">Our Mission</h3>
+                </div>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    To democratize cardiac healthcare in Africa by combining predictive AI with accessible telemedicine, breaking down barriers of cost, distance, and specialist scarcity.
+                </p>
+                <div class="bg-red-50 p-4 rounded-lg mt-4">
+                    <p class="text-red-700 font-semibold">
+                        <i class="fas fa-heartbeat mr-2"></i> 80% of cardiac deaths in Africa are preventable with early intervention
+                    </p>
+                </div>
+            </div>
+            <div class="bg-gradient-to-br from-blue-50 to-white p-8 rounded-2xl border border-blue-100 shadow-sm" data-aos="fade-left">
+                <div class="flex items-center mb-6">
+                    <div class="bg-blue-100 p-3 rounded-xl mr-4">
+                        <i class="fas fa-eye text-blue-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-800">Our Vision</h3>
+                </div>
+                <p class="text-gray-700 text-lg leading-relaxed mb-4">
+                    To become Africa's leading digital cardiac care platform, serving 10 million patients by 2030 through AI predictions, virtual consultations, and community support.
+                </p>
+                <div class="bg-blue-50 p-4 rounded-lg mt-4">
+                    <p class="text-blue-700 font-semibold">
+                        <i class="fas fa-globe-africa mr-2"></i> Targeting 500K users across Africa in first 3 years
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Problem Section -->
+<section id="problem" class="py-20 bg-gradient-to-b from-gray-50 to-white">
+    <div class="container mx-auto px-4 max-w-8xl h-full">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Africa's Cardiac Care Crisis</h2>
+        <div class="section-divider"></div>
+        <div class="grid md:grid-cols-2 gap-12 mt-12 items-center">
+            <div data-aos="fade-right">
+                <h3 class="text-2xl font-bold text-gray-800 mb-6">The Challenge in Africa</h3>
+                <ul class="space-y-6">
+                    <li class="flex items-start bg-white p-4 rounded-xl shadow-sm">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <i class="fas fa-user-md text-red-600"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 mb-1">Specialist Shortage</h4>
+                            <p class="text-gray-600">1 cardiologist per 1 million people in sub-Saharan Africa vs 1 per 10,000 in developed nations</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start bg-white p-4 rounded-xl shadow-sm">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <i class="fas fa-ambulance text-red-600"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 mb-1">Late Diagnosis</h4>
+                            <p class="text-gray-600">Patients travel 100+ km for cardiac consultation, delaying diagnosis by months</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start bg-white p-4 rounded-xl shadow-sm">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <i class="fas fa-money-bill-wave text-red-600"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 mb-1">Cost Barriers</h4>
+                            <p class="text-gray-600">Cardiac tests cost 3-6 months average salary, making prevention unaffordable</p>
+                        </div>
+                    </li>
+                    <li class="flex items-start bg-white p-4 rounded-xl shadow-sm">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <i class="fas fa-heart-broken text-red-600"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-gray-800 mb-1">Rising Epidemic</h4>
+                            <p class="text-gray-600">Cardiovascular diseases increasing by 20% annually in Africa due to lifestyle changes</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+            <div class="chart-container" data-aos="fade-left">
+                <h3 class="text-xl font-bold text-gray-800 mb-6 text-center">Cardiac Care Gap: Africa vs Developed World</h3>
+                <div class="chart-wrapper">
+                    <div class="chart-loading">Loading chart...</div>
+                    <canvas id="healthcareGapChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="mt-16">
+            <h3 class="text-2xl font-bold text-center text-gray-800 mb-8" data-aos="fade-up">The Opportunity for Innovation</h3>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="stat-card bg-gradient-to-br from-red-50 to-white p-6 text-center" data-aos="flip-left" data-aos-delay="100">
+                    <div class="text-5xl font-bold text-red-600 mb-2">$50</div>
+                    <p class="text-gray-700 font-medium">vs $500 traditional cardiac screening</p>
+                    <div class="mt-4 h-2 bg-red-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-red-500 rounded-full" style="width: 90%"></div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-600">90% cost reduction with our platform</div>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-orange-50 to-white p-6 text-center" data-aos="flip-up" data-aos-delay="200">
+                    <div class="text-5xl font-bold text-orange-600 mb-2">24/7</div>
+                    <p class="text-gray-700 font-medium">AI health consultant availability</p>
+                    <div class="mt-4 h-2 bg-orange-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-orange-500 rounded-full" style="width: 100%"></div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-600">Vs 2-6 month specialist wait times</div>
+                </div>
+                <div class="stat-card bg-gradient-to-br from-blue-50 to-white p-6 text-center" data-aos="flip-right" data-aos-delay="300">
+                    <div class="text-5xl font-bold text-blue-600 mb-2">30-min</div>
+                    <p class="text-gray-700 font-medium">Telemedicine appointment booking</p>
+                    <div class="mt-4 h-2 bg-blue-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-blue-500 rounded-full" style="width: 100%"></div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-600">Vs weeks for in-person consultation</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Features Section -->
+<section id="features" class="py-20 bg-white">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Complete Cardiac Care Platform</h2>
+        <div class="section-divider"></div>
+        <p class="text-center text-gray-600 max-w-3xl mx-auto mb-12" data-aos="fade-up" data-aos-delay="100">
+            Four powerful modules working together to deliver end-to-end cardiac healthcare
+        </p>
+        <div class="grid md:grid-cols-2 gap-8 mt-12">
+            <!-- Module 1: AI Prediction -->
+            <div class="feature-card bg-gradient-to-b from-white to-red-50 p-6 rounded-2xl border border-red-100 shadow-lg" data-aos="fade-right">
+                <div class="flex items-center mb-6">
+                    <div class="bg-red-100 p-4 rounded-xl mr-4">
+                        <i class="fas fa-brain text-red-600 text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">AI Risk Prediction</h3>
+                        <p class="text-gray-600">Module 1: Preventive Screening</p>
+                    </div>
+                </div>
+                <ul class="space-y-3 mb-6">
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>97% Accuracy:</strong> Predicts cardiac risk using 12 clinical parameters</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Instant Results:</strong> 60-second assessment with visual insights</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Personalized Reports:</strong> Actionable health recommendations</span>
+                    </li>
+                </ul>
+                <div class="bg-red-50 p-4 rounded-lg">
+                    <p class="text-red-700 font-semibold">
+                        <i class="fas fa-bolt mr-2"></i> Status: <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Live</span>
+                    </p>
+                </div>
+            </div>
+            <!-- Module 2: AI Health Consultant -->
+            <div class="feature-card bg-gradient-to-b from-white to-blue-50 p-6 rounded-2xl border border-blue-100 shadow-lg" data-aos="fade-left">
+                <div class="flex items-center mb-6">
+                    <div class="bg-blue-100 p-4 rounded-xl mr-4">
+                        <i class="fas fa-robot text-blue-600 text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">AI Health Consultant</h3>
+                        <p class="text-gray-600">Module 2: 24/7 Health Assistant</p>
+                    </div>
+                </div>
+                <ul class="space-y-3 mb-6">
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Conversational AI:</strong> Answers cardiac health questions naturally</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Medication Guidance:</strong> Drug information and interaction checks</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Lifestyle Coaching:</strong> Diet, exercise, and stress management tips</span>
+                    </li>
+                </ul>
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-blue-700 font-semibold">
+                        <i class="fas fa-code-branch mr-2"></i> Status: <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">In Development</span>
+                    </p>
+                </div>
+            </div>
+            <!-- Module 3: Telemedicine -->
+            <div class="feature-card bg-gradient-to-b from-white to-green-50 p-6 rounded-2xl border border-green-100 shadow-lg" data-aos="fade-right" data-aos-delay="100">
+                <div class="flex items-center mb-6">
+                    <div class="bg-green-100 p-4 rounded-xl mr-4">
+                        <i class="fas fa-video text-green-600 text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">Telemedicine Hub</h3>
+                        <p class="text-gray-600">Module 3: Virtual Doctor Consultations</p>
+                    </div>
+                </div>
+                <ul class="space-y-3 mb-6">
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Quick Appointments:</strong> Book cardiologists in 5 minutes</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Secure Video Calls:</strong> HIPAA-compliant virtual consultations</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>E-Prescriptions:</strong> Digital prescriptions sent to pharmacies</span>
+                    </li>
+                </ul>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <p class="text-green-700 font-semibold">
+                        <i class="fas fa-calendar-alt mr-2"></i> Status: <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">Beta Testing</span>
+                    </p>
+                </div>
+            </div>
+            <!-- Module 4: Community & Chat -->
+            <div class="feature-card bg-gradient-to-b from-white to-purple-50 p-6 rounded-2xl border border-purple-100 shadow-lg" data-aos="fade-left" data-aos-delay="100">
+                <div class="flex items-center mb-6">
+                    <div class="bg-purple-100 p-4 rounded-xl mr-4">
+                        <i class="fas fa-comments text-purple-600 text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">Community & Messaging</h3>
+                        <p class="text-gray-600">Module 4: Support Network</p>
+                    </div>
+                </div>
+                <ul class="space-y-3 mb-6">
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Doctor-Patient Chat:</strong> Secure messaging for appointments</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Support Groups:</strong> Connect with others on similar health journeys</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check-circle text-green-500 mt-1 mr-3"></i>
+                        <span class="text-gray-700"><strong>Health Challenges:</strong> Community wellness programs</span>
+                    </li>
+                </ul>
+                <div class="bg-purple-50 p-4 rounded-lg">
+                    <p class="text-purple-700 font-semibold">
+                        <i class="fas fa-users mr-2"></i> Status: <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm">In Development</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <!-- Platform Integration -->
+        <div class="mt-16 bg-gradient-to-r from-red-50 via-white to-orange-50 p-8 rounded-2xl border border-red-100 shadow-lg" data-aos="zoom-in">
+            <div class="max-w-3xl mx-auto text-center">
+                <div class="inline-block bg-red-100 p-4 rounded-full mb-6">
+                    <i class="fas fa-link text-red-600 text-3xl"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-4">Seamless Platform Integration</h3>
+                <p class="text-gray-700 text-lg mb-6 leading-relaxed">
+                    All modules work together: AI prediction flags risks → AI consultant provides initial guidance → Telemedicine connects to doctors → Community offers ongoing support
+                </p>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <div class="bg-white px-4 py-2 rounded-full text-red-600 font-semibold border border-red-200 shadow-sm">
+                        <i class="fas fa-mobile-alt mr-2"></i> Mobile & Web Access
+                    </div>
+                    <div class="bg-white px-4 py-2 rounded-full text-red-600 font-semibold border border-red-200 shadow-sm">
+                        <i class="fas fa-shield-alt mr-2"></i> End-to-End Encryption
+                    </div>
+                    <div class="bg-white px-4 py-2 rounded-full text-red-600 font-semibold border border-red-200 shadow-sm">
+                        <i class="fas fa-sync-alt mr-2"></i> Real-time Updates
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Technology Stack -->
+<section class="py-20 bg-gradient-to-b from-gray-50 to-white">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Technology Architecture</h2>
+        <div class="section-divider"></div>
+        <div class="mt-12 grid md:grid-cols-2 gap-12">
+            <div data-aos="fade-right">
+                <h3 class="text-2xl font-bold text-gray-800 mb-6">Current Stack & Development</h3>
+                <div class="space-y-6">
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <h4 class="font-bold text-lg text-gray-800 mb-2 flex items-center">
+                            <i class="fas fa-server text-red-600 mr-3"></i> Backend Infrastructure
+                        </h4>
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            <span class="bg-red-50 text-red-700 px-3 py-1 rounded-full text-sm">Flask/Python</span>
+                            <span class="bg-red-50 text-red-700 px-3 py-1 rounded-full text-sm">PostgreSQL</span>
+                            <span class="bg-red-50 text-red-700 px-3 py-1 rounded-full text-sm">Redis</span>
+                            <span class="bg-red-50 text-red-700 px-3 py-1 rounded-full text-sm">WebSockets</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <h4 class="font-bold text-lg text-gray-800 mb-2 flex items-center">
+                            <i class="fas fa-brain text-blue-600 mr-3"></i> AI/ML Components
+                        </h4>
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">Scikit-learn</span>
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">XGBoost</span>
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">TensorFlow</span>
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">NLP Models</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <h4 class="font-bold text-lg text-gray-800 mb-2 flex items-center">
+                            <i class="fas fa-mobile-alt text-green-600 mr-3"></i> Frontend & Mobile
+                        </h4>
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            <span class="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm">React.js</span>
+                            <span class="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm">Tailwind CSS</span>
+                            <span class="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm">React Native</span>
+                            <span class="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm">WebRTC</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Future Architecture Section -->
+                <div class="mt-12 bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200" data-aos="fade-right">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-rocket text-blue-600 mr-3"></i> Future Architecture
+                        <span class="ml-3 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">2026-2027</span>
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="flex items-start">
+                            <i class="fas fa-cloud text-blue-500 mt-1 mr-3"></i>
+                            <div>
+                                <h4 class="font-bold text-gray-800">Cloud Infrastructure</h4>
+                                <p class="text-gray-600 text-sm">Migration to AWS with auto-scaling, load balancing, and HIPAA-compliant data storage</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fas fa-mobile-alt text-blue-500 mt-1 mr-3"></i>
+                            <div>
+                                <h4 class="font-bold text-gray-800">Mobile Apps</h4>
+                                <p class="text-gray-600 text-sm">Native iOS/Android apps with offline capability and push notifications</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fas fa-microchip text-blue-500 mt-1 mr-3"></i>
+                            <div>
+                                <h4 class="font-bold text-gray-800">IoT Integration</h4>
+                                <p class="text-gray-600 text-sm">Integration with wearables (Apple Watch, Fitbit) for continuous health monitoring</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fas fa-sms text-blue-500 mt-1 mr-3"></i>
+                            <div>
+                                <h4 class="font-bold text-gray-800">USSD Gateway</h4>
+                                <p class="text-gray-600 text-sm">SMS-based access for low-connectivity regions in rural Africa</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-container" data-aos="fade-left">
+                <h3 class="text-xl font-bold text-gray-800 mb-6 text-center">Development Progress</h3>
+                <div class="chart-wrapper">
+                    <div class="chart-loading">Loading chart...</div>
+                    <canvas id="developmentProgressChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Market Opportunity -->
+<section id="market" class="py-20 bg-white">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Africa's Digital Health Opportunity</h2>
+        <div class="section-divider"></div>
+        <div class="mt-12 grid md:grid-cols-3 gap-8">
+            <div class="stat-card bg-gradient-to-br from-red-50 to-white p-6 text-center" data-aos="fade-up" data-aos-delay="100">
+                <div class="text-5xl font-bold text-red-600 mb-2">$1.2B</div>
+                <p class="text-gray-700 font-medium">Africa Digital Health Market (2025)</p>
+                <div class="mt-4 text-sm text-gray-600 bg-red-50 p-2 rounded-lg">
+                    <i class="fas fa-chart-line mr-1"></i> 35% CAGR growth projected
+                </div>
+            </div>
+            <div class="stat-card bg-gradient-to-br from-blue-50 to-white p-6 text-center" data-aos="fade-up" data-aos-delay="200">
+                <div class="text-5xl font-bold text-blue-600 mb-2">600M</div>
+                <p class="text-gray-700 font-medium">Smartphone Users in Africa</p>
+                <div class="mt-4 text-sm text-gray-600 bg-blue-50 p-2 rounded-lg">
+                    <i class="fas fa-mobile-alt mr-1"></i> 45% smartphone penetration
+                </div>
+            </div>
+            <div class="stat-card bg-gradient-to-br from-green-50 to-white p-6 text-center" data-aos="fade-up" data-aos-delay="300">
+                <div class="text-5xl font-bold text-green-600 mb-2">100M</div>
+                <p class="text-gray-700 font-medium">Cardiac Risk Population</p>
+                <div class="mt-4 text-sm text-gray-600 bg-green-50 p-2 rounded-lg">
+                    <i class="fas fa-heart mr-1"></i> Growing lifestyle disease burden
+                </div>
+            </div>
+        </div>
+        <div id="marketGrowthChart-container" class="mt-16 chart-container" data-aos="zoom-in">
+            <h3 class="text-xl font-bold text-gray-800 mb-6 text-center">Market Growth Potential</h3>
+            <div class="chart-wrapper">
+                <div class="chart-loading">Loading chart...</div>
+                <canvas id="marketGrowthChart"></canvas>
+            </div>
+        </div>
+        <div class="mt-16">
+            <h3 class="text-2xl font-bold text-center text-gray-800 mb-8" data-aos="fade-up">Revenue Streams</h3>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="bg-gradient-to-b from-white to-red-50 p-6 rounded-xl border border-red-100 text-center hover:shadow-lg transition-all duration-300" data-aos="fade-up" data-aos-delay="100">
+                    <div class="inline-block bg-red-100 p-4 rounded-full mb-4">
+                        <i class="fas fa-user text-red-600 text-2xl"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-800 mb-3">Individual Subscriptions</h4>
+                    <p class="text-gray-600 mb-4">Monthly/Yearly access to AI prediction and basic features</p>
+                    <div class="mt-4 bg-red-50 p-3 rounded-lg">
+                        <div class="text-red-600 font-bold">$5-15/month</div>
+                        <div class="text-sm text-gray-600">Tiered pricing plans</div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-b from-white to-blue-50 p-6 rounded-xl border border-blue-100 text-center hover:shadow-lg transition-all duration-300" data-aos="fade-up" data-aos-delay="200">
+                    <div class="inline-block bg-blue-100 p-4 rounded-full mb-4">
+                        <i class="fas fa-video text-blue-600 text-2xl"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-800 mb-3">Telemedicine Fees</h4>
+                    <p class="text-gray-600 mb-4">Commission on doctor consultations and prescriptions</p>
+                    <div class="mt-4 bg-blue-50 p-3 rounded-lg">
+                        <div class="text-blue-600 font-bold">5-15% Commission</div>
+                        <div class="text-sm text-gray-600">Per consultation fee</div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-b from-white to-green-50 p-6 rounded-xl border border-green-100 text-center hover:shadow-lg transition-all duration-300" data-aos="fade-up" data-aos-delay="300">
+                    <div class="inline-block bg-green-100 p-4 rounded-full mb-4">
+                        <i class="fas fa-building text-green-600 text-2xl"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-800 mb-3">Enterprise Solutions</h4>
+                    <p class="text-gray-600 mb-4">Corporate wellness programs and insurance partnerships</p>
+                    <div class="mt-4 bg-green-50 p-3 rounded-lg">
+                        <div class="text-green-600 font-bold">Custom Pricing</div>
+                        <div class="text-sm text-gray-600">Annual contracts</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Traction & Milestones -->
+<section class="py-20 bg-gradient-to-b from-gray-50 to-white">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Current Traction & Roadmap</h2>
+        <div class="section-divider"></div>
+        <div class="mt-12 grid md:grid-cols-4 gap-6">
+            <div class="stat-card bg-gradient-to-b from-white to-red-50 p-6 text-center" data-aos="fade-up" data-aos-delay="100">
+                <div class="text-4xl font-bold text-red-600 mb-2">MVP</div>
+                <p class="text-gray-700 font-medium">Live & Functional</p>
+                <div class="mt-3 h-2 bg-red-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-red-500 rounded-full" style="width: 100%"></div>
+                </div>
+                <div class="mt-3 text-sm text-gray-600">AI prediction module complete</div>
+            </div>
+            <div class="stat-card bg-gradient-to-b from-white to-blue-50 p-6 text-center" data-aos="fade-up" data-aos-delay="200">
+                <div class="text-4xl font-bold text-blue-600 mb-2">100+</div>
+                <p class="text-gray-700 font-medium">Test Users</p>
+                <div class="mt-3 h-2 bg-blue-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-blue-500 rounded-full" style="width: 20%"></div>
+                </div>
+                <div class="mt-3 text-sm text-gray-600">Initial user feedback collected</div>
+            </div>
+            <div class="stat-card bg-gradient-to-b from-white to-green-50 p-6 text-center" data-aos="fade-up" data-aos-delay="300">
+                <div class="text-4xl font-bold text-green-600 mb-2">2</div>
+                <p class="text-gray-700 font-medium">Doctor Partners</p>
+                <div class="mt-3 h-2 bg-green-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-green-500 rounded-full" style="width: 30%"></div>
+                </div>
+                <div class="mt-3 text-sm text-gray-600">For telemedicine pilot</div>
+            </div>
+            <div class="stat-card bg-gradient-to-b from-white to-purple-50 p-6 text-center" data-aos="fade-up" data-aos-delay="400">
+                <div class="text-4xl font-bold text-purple-600 mb-2">97%</div>
+                <p class="text-gray-700 font-medium">Accuracy Rate</p>
+                <div class="mt-3 h-2 bg-purple-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-purple-500 rounded-full" style="width: 97%"></div>
+                </div>
+                <div class="mt-3 text-sm text-gray-600">On validation dataset</div>
+            </div>
+        </div>
+        <!-- Development Timeline -->
+        <div class="mt-16" data-aos="fade-up">
+            <h3 class="text-2xl font-bold text-center text-gray-800 mb-8">Development Timeline</h3>
+            <div class="relative">
+                <!-- Timeline line -->
+                <div class="absolute left-1/2 transform -translate-x-1/2 h-full w-1 bg-red-200"></div>
+                <!-- Milestone 1 -->
+                <div class="relative mb-12 flex items-center">
+                    <div class="w-1/2 pr-12 text-right">
+                        <div class="bg-white p-6 rounded-xl border border-red-100 shadow-sm">
+                            <div class="text-red-600 font-bold mb-2">Q3 2025 - Q4 2025</div>
+                            <h4 class="font-bold text-gray-800 mb-2">MVP Launch</h4>
+                            <p class="text-gray-600">AI prediction module with basic interface</p>
+                            <div class="mt-3">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Completed</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute left-1/2 transform -translate-x-1/2">
+                        <div class="w-8 h-8 bg-red-500 rounded-full border-4 border-white shadow-lg"></div>
+                    </div>
+                    <div class="w-1/2"></div>
+                </div>
+                <!-- Milestone 2 -->
+                <div class="relative mb-12 flex items-center">
+                    <div class="w-1/2"></div>
+                    <div class="absolute left-1/2 transform -translate-x-1/2">
+                        <div class="w-8 h-8 bg-red-500 rounded-full border-4 border-white shadow-lg"></div>
+                    </div>
+                    <div class="w-1/2 pl-12">
+                        <div class="bg-white p-6 rounded-xl border border-red-100 shadow-sm">
+                            <div class="text-red-600 font-bold mb-2">Q4 2025</div>
+                            <h4 class="font-bold text-gray-800 mb-2">Telemedicine Beta</h4>
+                            <p class="text-gray-600">Doctor appointment booking & video consultations</p>
+                            <div class="mt-3">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">In Progress</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Milestone 3 -->
+                <div class="relative mb-12 flex items-center">
+                    <div class="w-1/2 pr-12 text-right">
+                        <div class="bg-white p-6 rounded-xl border border-red-100 shadow-sm">
+                            <div class="text-red-600 font-bold mb-2">Q4 2025</div>
+                            <h4 class="font-bold text-gray-800 mb-2">AI Health Consultant</h4>
+                            <p class="text-gray-600">24/7 conversational AI assistant launch</p>
+                            <div class="mt-3">
+                                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">Development</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute left-1/2 transform -translate-x-1/2">
+                        <div class="w-8 h-8 bg-red-300 rounded-full border-4 border-white shadow-lg"></div>
+                    </div>
+                    <div class="w-1/2"></div>
+                </div>
+                <!-- Milestone 4 -->
+                <div class="relative flex items-center">
+                    <div class="w-1/2"></div>
+                    <div class="absolute left-1/2 transform -translate-x-1/2">
+                        <div class="w-8 h-8 bg-red-200 rounded-full border-4 border-white shadow-lg"></div>
+                    </div>
+                    <div class="w-1/2 pl-12">
+                        <div class="bg-white p-6 rounded-xl border border-red-100 shadow-sm">
+                            <div class="text-red-600 font-bold mb-2">Q3 2026</div>
+                            <h4 class="font-bold text-gray-800 mb-2">Enterprise Pre-Launch</h4>
+                            <p class="text-gray-600">Community features & enterprise solutions</p>
+                            <div class="mt-3">
+                                <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm">Planned</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Business Model -->
+<section id="business" class="py-20 bg-white">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-4" data-aos="fade-up">Sustainable Business Model</h2>
+        <div class="section-divider"></div>
+        <div class="mt-12 grid md:grid-cols-2 gap-12 items-center">
+            <div data-aos="fade-right">
+                <h3 class="text-2xl font-bold text-gray-800 mb-6">Revenue Model</h3>
+                <div class="space-y-6">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-red-300 transition-all duration-300">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                <div class="bg-red-100 p-2 rounded-lg mr-3">
+                                    <i class="fas fa-user text-red-600"></i>
+                                </div>
+                                Freemium Model
+                            </h4>
+                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">Active</span>
+                        </div>
+                        <p class="text-gray-600">Free basic predictions, paid tiers for advanced features & consultations</p>
+                        <div class="mt-3 text-sm text-gray-500">
+                            <i class="fas fa-bullseye mr-1"></i> Target: 50K free → 10K paid users Year 1
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-red-300 transition-all duration-300">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                <div class="bg-blue-100 p-2 rounded-lg mr-3">
+                                    <i class="fas fa-video text-blue-600"></i>
+                                </div>
+                                Telemedicine Commission
+                            </h4>
+                            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">Beta</span>
+                        </div>
+                        <p class="text-gray-600">20% commission on doctor consultations ($20-50 per session)</p>
+                        <div class="mt-3 text-sm text-gray-500">
+                            <i class="fas fa-bullseye mr-1"></i> Target: 500 consultations/month Year 1
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-red-300 transition-all duration-300">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="font-bold text-lg text-gray-800 flex items-center">
+                                <div class="bg-purple-100 p-2 rounded-lg mr-3">
+                                    <i class="fas fa-building text-purple-600"></i>
+                                </div>
+                                B2B Partnerships
+                            </h4>
+                            <span class="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">Developing</span>
+                        </div>
+                        <p class="text-gray-600">Corporate wellness programs, insurance integrations, clinic partnerships</p>
+                        <div class="mt-3 text-sm text-gray-500">
+                            <i class="fas fa-bullseye mr-1"></i> Target: 10 corporate clients Year 1
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-container" data-aos="fade-left">
+                <h3 class="text-xl font-bold text-gray-800 mb-6 text-center">Projected Revenue Mix (Year 2)</h3>
+                <div class="chart-wrapper">
+                    <div class="chart-loading">Loading chart...</div>
+                    <canvas id="revenueMixChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Financial Projections -->
+<section id="financials" class="py-20 bg-gradient-to-br from-red-600 via-red-500 to-orange-600 text-white">
+    <div class="container mx-auto px-4 max-w-6xl">
+        <h2 class="text-3xl font-bold text-center mb-4" data-aos="fade-up">Investment Opportunity</h2>
+        <div class="section-divider bg-white"></div>
+        <div class="mt-12 text-center" data-aos="fade-up">
+            <div class="inline-block bg-white/20 backdrop-blur-sm px-8 py-4 rounded-2xl mb-6">
+                <h3 class="text-2xl font-bold mb-2">Seeking $20K Pre-Seed Funding</h3>
+                <p class="opacity-90 max-w-2xl mx-auto">To complete platform development, launch telemedicine, and acquire initial users in Nigeria and Other African countries</p>
+            </div>
+            <div class="bg-white/10 backdrop-blur-sm p-8 rounded-2xl max-w-4xl mx-auto mt-8">
+                <h4 class="text-xl font-bold mb-6">Allocation of Funds</h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="financial-metric p-4 rounded-xl text-center">
+                        <div class="text-3xl font-bold mb-2">40%</div>
+                        <div class="font-medium">Product Development</div>
+                        <div class="text-sm opacity-80 mt-2">Telemedicine, USSD, mobile apps</div>
+                    </div>
+                    <div class="financial-metric p-4 rounded-xl text-center">
+                        <div class="text-3xl font-bold mb-2">35%</div>
+                        <div class="font-medium">User Acquisition</div>
+                        <div class="text-sm opacity-80 mt-2">Marketing, partnerships, doctor onboarding</div>
+                    </div>
+                    <div class="financial-metric p-4 rounded-xl text-center">
+                        <div class="text-3xl font-bold mb-2">15%</div>
+                        <div class="font-medium">Team Expansion</div>
+                        <div class="text-sm opacity-80 mt-2">Key hires in sales, marketing, support</div>
+                    </div>
+                    <div class="financial-metric p-4 rounded-xl text-center">
+                        <div class="text-3xl font-bold mb-2">10%</div>
+                        <div class="font-medium">Legal & Operations</div>
+                        <div class="text-sm opacity-80 mt-2">Regulatory compliance, office, insurance</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="financialProjectionChart-container" class="mt-16">
+            <h3 class="text-2xl font-bold text-center mb-8" data-aos="fade-up">3-Year Financial Projection ($ Thousands)</h3>
+            <div class="chart-container bg-white/10 backdrop-blur-sm border-white/20" data-aos="zoom-in">
+                <div class="chart-wrapper">
+                    <div class="chart-loading" style="color: white;">Loading chart...</div>
+                    <canvas id="financialProjectionChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="mt-16 bg-white/10 backdrop-blur-sm p-8 rounded-2xl max-w-4xl mx-auto" data-aos="fade-up">
+            <h3 class="text-2xl font-bold mb-6 text-center">Key Milestones with Funding</h3>
+            <div class="grid md:grid-cols-3 gap-6 mt-6">
+                <div class="financial-metric p-6 rounded-xl text-center">
+                    <div class="text-4xl font-bold mb-2">12 Months</div>
+                    <div class="font-medium">Full Platform Launch</div>
+                    <div class="text-sm opacity-80 mt-2">All 4 modules fully developed</div>
+                </div>
+                <div class="financial-metric p-6 rounded-xl text-center">
+                    <div class="text-4xl font-bold mb-2"> >5k Users</div>
+                    <div class="font-medium">Active User Base</div>
+                    <div class="text-sm opacity-80 mt-2">Within 24 months</div>
+                </div>
+                <div class="financial-metric p-6 rounded-xl text-center">
+                    <div class="text-4xl font-bold mb-2">$10K</div>
+                    <div class="font-medium">Annual Revenue</div>
+                    <div class="text-sm opacity-80 mt-2">By end of Year 3</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Load scripts at the end of body -->
+<script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Initialize AOS first
+    document.addEventListener('DOMContentLoaded', function() {
+        AOS.init({
+            duration: 800,
+            once: true,
+            easing: 'ease-out-cubic',
+            offset: 100
+        });
+        // Wait for Chart.js to load
+        function initializeCharts() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js is not loaded. Retrying in 500ms...');
+                setTimeout(initializeCharts, 500);
+                return;
+            }
+            console.log('Chart.js loaded successfully, initializing charts...');
+            // Set global chart defaults
+            Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif";
+            Chart.defaults.font.size = 14;
+            Chart.defaults.color = '#4b5563';
+            Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            Chart.defaults.plugins.tooltip.padding = 10;
+            Chart.defaults.plugins.tooltip.cornerRadius = 6;
+            // Function to create charts with proper error handling
+            function createChart(canvasId, config) {
+                const canvas = document.getElementById(canvasId);
+                if (!canvas) {
+                    console.error(`Canvas element with id '${canvasId}' not found`);
+                    return null;
+                }
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    console.error(`Could not get 2D context for canvas '${canvasId}'`);
+                    return null;
+                }
+                // Hide loading message
+                const loadingDiv = canvas.previousElementSibling;
+                if (loadingDiv && loadingDiv.classList.contains('chart-loading')) {
+                    loadingDiv.style.display = 'none';
+                }
+                return new Chart(ctx, config);
+            }
+            // Chart 1: Healthcare Gap Comparison
+            createChart('healthcareGapChart', {
+                type: 'bar',
+                data: {
+                    labels: ['Cardiologists per million', 'Diagnostic wait time (weeks)', 'Average consultation cost ($)', 'Treatment accessibility (%)'],
+                    datasets: [{
+                        label: 'Africa',
+                        data: [1, 8, 500, 20],
+                        backgroundColor: '#dc2626',
+                        borderWidth: 0,
+                        borderRadius: 8,
+                        barPercentage: 0.6,
+                    }, {
+                        label: 'Developed World',
+                        data: [100, 2, 50, 90],
+                        backgroundColor: '#0ea5e9',
+                        borderWidth: 0,
+                        borderRadius: 8,
+                        barPercentage: 0.6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+            // Chart 2: Development Progress
+            createChart('developmentProgressChart', {
+                type: 'doughnut',
+                data: {
+                    labels: ['AI Prediction (Live)', 'Telemedicine (Beta)', 'AI Health Assistant (Dev)', 'Community (Planned)'],
+                    datasets: [{
+                        data: [100, 60, 30, 10],
+                        backgroundColor: [
+                            '#dc2626',
+                            '#0ea5e9',
+                            '#10b981',
+                            '#8b5cf6'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 15
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                padding: 15,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    },
+                    cutout: '60%'
+                }
+            });
+            // Chart 3: Market Growth
+            createChart('marketGrowthChart', {
+                type: 'line',
+                data: {
+                    labels: ['2025', '2026', '2027', '2028', '2029'],
+                    datasets: [{
+                        label: 'Digital Health Users (Africa)',
+                        data: [50, 85, 140, 220, 350],
+                        borderColor: '#dc2626',
+                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#dc2626',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y} million`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Users (Millions)'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        }
+                    }
+                }
+            });
+            // Chart 4: Revenue Mix
+            createChart('revenueMixChart', {
+                type: 'pie',
+                data: {
+                    labels: ['Subscriptions', 'Telemedicine', 'B2B Services', 'Other'],
+                    datasets: [{
+                        data: [45, 35, 15, 5],
+                        backgroundColor: [
+                            '#dc2626',
+                            '#0ea5e9',
+                            '#10b981',
+                            '#f59e0b'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 20
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                padding: 15,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            // Chart 5: Financial Projection
+            createChart('financialProjectionChart', {
+                type: 'line',
+                data: {
+                    labels: ['2025', '2026', '2027', '2028'],
+                    datasets: [{
+                        label: 'Revenue ($K)',
+                        data: [0, 150, 500, 1200],
+                        borderColor: '#ffffff',
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#dc2626',
+                        pointBorderWidth: 2,
+                        pointRadius: 6
+                    }, {
+                        label: 'Users (K)',
+                        data: [0.2, 10, 50, 150],
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        borderDash: [5, 5],
+                        pointBackgroundColor: '#fbbf24',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#ffffff',
+                                font: {
+                                    size: 14
+                                },
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#ffffff',
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#ffffff',
+                                font: {
+                                    size: 13
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+            console.log('All charts initialized successfully');
+        }
+        // Start initializing charts
+        setTimeout(initializeCharts, 100);
+        // Smooth scrolling for navigation
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                if (targetId === '#') return;
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 80,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
