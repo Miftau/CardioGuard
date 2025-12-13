@@ -1718,7 +1718,7 @@ def search_users():
         return jsonify({"users": []}), 500
 
 @app.route("/chat", methods=["GET", "POST"])
-@login_required
+#@login_required
 def chat():
     if request.method == "GET":
         chat_log = session.get("chat_log", [])
