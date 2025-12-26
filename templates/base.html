@@ -230,191 +230,181 @@
 
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col transition-colors duration-300">
 
-        <!-- ==================== NAVBAR (Improved & Fully Responsive) ==================== -->
-        <nav class="bg-white dark:bg-gray-800 shadow-lg py-4 sticky top-0 z-50 transition-all duration-300">
-            <div class="container mx-auto flex justify-between items-center px-4 sm:px-6 lg:px-8">
+    <!-- ==================== NAVBAR (Improved & Fully Responsive) ==================== -->
+    <nav class="bg-white dark:bg-gray-800 shadow-lg py-4 sticky top-0 z-50 transition-all duration-300">
+        <div class="container mx-auto flex justify-between items-center px-4 sm:px-6 lg:px-8">
 
-                <!-- Logo -->
-                <a href="/" class="text-2xl sm:text-4xl font-bold text-red-500 flex items-center gap-2">
-                    <span class="animate-pulse-heart">❤️</span> CardioGuard
-                </a>
+            <!-- Logo -->
+            <a href="/" class="text-2xl sm:text-4xl font-bold text-red-500 flex items-center gap-2">
+                <span class="animate-pulse-heart">❤️</span> CardioGuard
+            </a>
 
-                <!-- Desktop Navigation + Right Side (Profile / Auth Buttons) -->
-                <div class="hidden sm:flex items-center space-x-8">
+            <!-- Desktop Navigation + Right Side (Profile / Auth Buttons) -->
+            <div class="hidden sm:flex items-center space-x-8">
 
-                    <!-- Main Nav Links (Desktop) -->
-                    <ul class="flex items-center space-x-6 text-gray-700 dark:text-gray-200">
-                        {% macro nav_link(url, label) %}
-                        <li>
-                            <a href="{{ url }}"
+                <!-- Main Nav Links (Desktop) -->
+                <ul class="flex items-center space-x-6 text-gray-700 dark:text-gray-200">
+                    {% macro nav_link(url, label) %}
+                    <li>
+                        <a href="{{ url }}"
                             class="text-lg font-medium hover:text-red-500 dark:hover:text-red-400 transition {% if request.path == url %}text-red-500 dark:text-red-400 font-bold{% endif %}">
-                                {{ label }}
-                            </a>
-                        </li>
-                        {% endmacro %}
-
-                        {{ nav_link('/', 'Home') }}
-                        {{ nav_link('/about', 'About') }}
-                        {{ nav_link('/contact', 'Contact') }}
-                        {{ nav_link('/resources', 'Resources') }}
-                        {{ nav_link('/chat', 'CardioAI') }}
-                        {{ nav_link('/form', 'Predict Now') }}
-                    </ul>
-
-                    <!-- Right Side: External Apps + Auth/Profile -->
-                    <div class="flex items-center space-x-4">
-
-                        <!-- External Apps (small icons on desktop) -->
-                        <div class="flex space-x-3 text-gray-600 dark:text-gray-400">
-                            <a href="https://renalguard.onrender.com  " target="_blank" title="RenalGuard"
-                            class="text-xl hover:text-green-500 transition">Kidney</a>
-                            <a href="https://hepaguard.onrender.com  " target="_blank" title="HepaGuard"
-                            class="text-xl hover:text-yellow-600 transition">Liver</a>
-                        </div>
-
-                        <!-- Dark Mode Toggle -->
-                        <button id="dark-mode-toggle"
-                                class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition">
-                            <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
-                            <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
-                        </button>
-
-                        <!-- Profile Icon (Desktop) - Dynamic Link -->
-                        {% if session.get('role') == 'admin' %}
-                            {% set dashboard_url = url_for('admin_dashboard') %}
-                            {% set tooltip_text = 'Admin Panel' %}
-                        {% elif session.get('role') == 'doctor' %}
-                            {% set dashboard_url = url_for('doctor_dashboard') %}
-                            {% set tooltip_text = 'Doctor Panel' %}
-                        {% elif session.get('role') == 'user' %}
-                            {% set dashboard_url = url_for('user_dashboard') %}
-                            {% set tooltip_text = 'My Dashboard' %}
-                        {% else %}
-                            {% set dashboard_url = '#' %}
-                            {% set tooltip_text = 'Dashboard' %} <!-- Fallback -->
-                        {% endif %}
-
-                        {% if dashboard_url != '#' %}
-                            <a href="{{ dashboard_url }}" class="group relative">
-                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white text-lg shadow-lg ring-4 ring-red-500/30 hover:ring-red-500 transition-all">
-                                    <i class="fas fa-user"></i>
-                                </div>
-                                <span class="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap pointer-events-none z-10">
-                                    {{ tooltip_text }}
-                                </span>
-                            </a>
-
-
-                            <!-- Logout Button (Desktop) -->
-                            <a href="/logout"
-                            class="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-medium transition">
-                                Logout
-                            </a>
-
-                        {% else %}
-                            <!-- Not Logged In -->
-                            <a href="/login"
-                            class="bg-gradient-to-r from-red-600 to-red-700 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full font-medium transition shadow-lg hover:shadow-xl">
-                                Login
-                            </a>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Mobile: Hamburger + Right Icons -->
-                <div class="flex items-center gap-4 sm:hidden">
-
-                    <!-- Dark Mode (Mobile) -->
-                    <button id="dark-mode-toggle" class="p-2">
-                        <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
-                        <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
-                    </button>
-
-                    <!-- Profile Icon (Mobile - Logged In) - Dynamic Link -->
-                    {% if session.get('role') == 'admin' %}
-                        {% set dashboard_url = url_for('admin_dashboard') %}
-                        {% set tooltip_text = 'Admin Panel' %}
-                    {% elif session.get('role') == 'doctor' %}
-                        {% set dashboard_url = url_for('doctor_dashboard') %}
-                        {% set tooltip_text = 'Doctor Panel' %}
-                    {% elif session.get('role') == 'user' %}
-                        {% set dashboard_url = url_for('user_dashboard') %}
-                        {% set tooltip_text = 'My Dashboard' %}
-                    {% else %}
-                        {% set dashboard_url = '#' %}
-                        {% set tooltip_text = 'Dashboard' %} <!-- Fallback -->
-                    {% endif %}
-
-                    {% if dashboard_url != '#' %}
-                        <a href="{{ dashboard_url }}" class="group relative">
-                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white text-lg shadow-lg ring-4 ring-red-500/30 hover:ring-red-500 transition-all">
-                                <i class="fas fa-user"></i>
-                            </div>
-                            <span class="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap pointer-events-none z-10">
-                                {{ tooltip_text }}
-                            </span>
+                            {{ label }}
                         </a>
-                    {% endif %}
+                    </li>
+                    {% endmacro %}
 
-                    <!-- Hamburger -->
-                    <button id="mobile-menu-toggle"
-                            class="text-gray-700 dark:text-gray-200 focus:outline-none z-50">
-                        <i id="menu-icon" class="fas fa-bars text-2xl"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Mobile Menu Dropdown -->
-            <div id="mobile-menu"
-                class="sm:hidden absolute top-full left-0 w-full bg-white dark:bg-gray-800 shadow-xl border-t border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300"
-                style="max-height: 0;">
-                <ul class="py-4 px-6 space-y-4 text-lg">
                     {{ nav_link('/', 'Home') }}
                     {{ nav_link('/about', 'About') }}
                     {{ nav_link('/contact', 'Contact') }}
                     {{ nav_link('/resources', 'Resources') }}
                     {{ nav_link('/chat', 'CardioAI') }}
                     {{ nav_link('/form', 'Predict Now') }}
-
-                    <li class="pt-4 border-t border-gray-300 dark:border-gray-600">
-                        <div class="flex gap-4 text-2xl">
-                            <a href="https://renalguard.onrender.com  " target="_blank" class="text-green-600">Kidney</a>
-                            <a href="https://hepaguard.onrender.com  " target="_blank" class="text-yellow-600">Liver</a>
-                        </div>
-                    </li>
-
-                    {% if session.get('role') %}
-                        <!-- Dynamic Dashboard Link in Mobile Menu -->
-                        {% if session.get('role') == 'admin' %}
-                            {% set mobile_dashboard_url = url_for('admin_dashboard') %}
-                        {% elif session.get('role') == 'doctor' %}
-                            {% set mobile_dashboard_url = url_for('doctor_dashboard') %}
-                        {% elif session.get('role') == 'user' %}
-                            {% set mobile_dashboard_url = url_for('user_dashboard') %}
-                        {% endif %}
-                        <li>
-                            <a href="{{ mobile_dashboard_url }}" class="text-red-500 font-semibold flex items-center gap-2">
-                                <i class="fas fa-user-circle"></i> My Dashboard
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/logout" class="block text-center bg-red-600 text-white py-3 rounded-lg font-medium">
-                                Logout
-                            </a>
-                        </li>
-                    {% else %}
-                        <li>
-                            <a href="/login" class="block text-center bg-gradient-to-r from-red-600 to-red-700 hover:bg-red-900 text-white py-3 rounded-lg font-medium">
-                                Login / Register
-                            </a>
-                        </li>
-                    {% endif %}
                 </ul>
+
+                <!-- Right Side: External Apps + Auth/Profile -->
+                <div class="flex items-center space-x-4">
+
+
+                    <!-- Dark Mode Toggle -->
+                    <button id="dark-mode-toggle"
+                        class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                        <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
+                        <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
+                    </button>
+
+                    <!-- Profile Icon (Desktop) - Dynamic Link -->
+                    {% if session.get('role') == 'admin' %}
+                    {% set dashboard_url = url_for('admin_dashboard') %}
+                    {% set tooltip_text = 'Admin Panel' %}
+                    {% elif session.get('role') == 'doctor' %}
+                    {% set dashboard_url = url_for('doctor_dashboard') %}
+                    {% set tooltip_text = 'Doctor Panel' %}
+                    {% elif session.get('role') == 'user' %}
+                    {% set dashboard_url = url_for('user_dashboard') %}
+                    {% set tooltip_text = 'My Dashboard' %}
+                    {% else %}
+                    {% set dashboard_url = '#' %}
+                    {% set tooltip_text = 'Dashboard' %} <!-- Fallback -->
+                    {% endif %}
+
+                    {% if dashboard_url != '#' %}
+                    <a href="{{ dashboard_url }}" class="group relative">
+                        <div
+                            class="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white text-lg shadow-lg ring-4 ring-red-500/30 hover:ring-red-500 transition-all">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <span
+                            class="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap pointer-events-none z-10">
+                            {{ tooltip_text }}
+                        </span>
+                    </a>
+
+
+                    <!-- Logout Button (Desktop) -->
+                    <a href="/logout"
+                        class="bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-full text-sm font-medium transition">
+                        Logout
+                    </a>
+
+                    {% else %}
+                    <!-- Not Logged In -->
+                    <a href="/login"
+                        class="bg-gradient-to-r from-red-600 to-red-700 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full font-medium transition shadow-lg hover:shadow-xl">
+                        Login
+                    </a>
+                    {% endif %}
+                </div>
             </div>
-        </nav>
+
+            <!-- Mobile: Hamburger + Right Icons -->
+            <div class="flex items-center gap-4 sm:hidden">
+
+                <!-- Dark Mode (Mobile) -->
+                <button id="dark-mode-toggle" class="p-2">
+                    <i id="dark-mode-sun" class="fas fa-sun text-yellow-500 text-xl"></i>
+                    <i id="dark-mode-moon" class="fas fa-moon hidden text-indigo-400 text-xl"></i>
+                </button>
+
+                <!-- Profile Icon (Mobile - Logged In) - Dynamic Link -->
+                {% if session.get('role') == 'admin' %}
+                {% set dashboard_url = url_for('admin_dashboard') %}
+                {% set tooltip_text = 'Admin Panel' %}
+                {% elif session.get('role') == 'doctor' %}
+                {% set dashboard_url = url_for('doctor_dashboard') %}
+                {% set tooltip_text = 'Doctor Panel' %}
+                {% elif session.get('role') == 'user' %}
+                {% set dashboard_url = url_for('user_dashboard') %}
+                {% set tooltip_text = 'My Dashboard' %}
+                {% else %}
+                {% set dashboard_url = '#' %}
+                {% set tooltip_text = 'Dashboard' %} <!-- Fallback -->
+                {% endif %}
+
+                {% if dashboard_url != '#' %}
+                <a href="{{ dashboard_url }}" class="group relative">
+                    <div
+                        class="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center text-white text-lg shadow-lg ring-4 ring-red-500/30 hover:ring-red-500 transition-all">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <span
+                        class="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap pointer-events-none z-10">
+                        {{ tooltip_text }}
+                    </span>
+                </a>
+                {% endif %}
+
+                <!-- Hamburger -->
+                <button id="mobile-menu-toggle" class="text-gray-700 dark:text-gray-200 focus:outline-none z-50">
+                    <i id="menu-icon" class="fas fa-bars text-2xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Menu Dropdown -->
+        <div id="mobile-menu"
+            class="sm:hidden absolute top-full left-0 w-full bg-white dark:bg-gray-800 shadow-xl border-t border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300"
+            style="max-height: 0;">
+            <ul class="py-4 px-6 space-y-4 text-lg">
+                {{ nav_link('/', 'Home') }}
+                {{ nav_link('/about', 'About') }}
+                {{ nav_link('/contact', 'Contact') }}
+                {{ nav_link('/resources', 'Resources') }}
+                {{ nav_link('/chat', 'CardioAI') }}
+                {{ nav_link('/form', 'Predict Now') }}
+
+                {% if session.get('role') %}
+                <!-- Dynamic Dashboard Link in Mobile Menu -->
+                {% if session.get('role') == 'admin' %}
+                {% set mobile_dashboard_url = url_for('admin_dashboard') %}
+                {% elif session.get('role') == 'doctor' %}
+                {% set mobile_dashboard_url = url_for('doctor_dashboard') %}
+                {% elif session.get('role') == 'user' %}
+                {% set mobile_dashboard_url = url_for('user_dashboard') %}
+                {% endif %}
+                <li>
+                    <a href="{{ mobile_dashboard_url }}" class="text-red-500 font-semibold flex items-center gap-2">
+                        <i class="fas fa-user-circle"></i> My Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="/logout" class="block text-center bg-red-600 text-white py-3 rounded-lg font-medium">
+                        Logout
+                    </a>
+                </li>
+                {% else %}
+                <li>
+                    <a href="/login"
+                        class="block text-center bg-gradient-to-r from-red-600 to-red-700 hover:bg-red-900 text-white py-3 rounded-lg font-medium">
+                        Login / Register
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
 
 
- <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
+    <!-- ==================== MAIN LAYOUT CONTAINER ==================== -->
     <!-- Use a flex container to manage sidebar and main content -->
     <div class="flex flex-1 flex-col md:flex-row"> <!-- Use flex on smaller screens, row on md+ -->
         <!-- Sidebar will be included conditionally in dashboard templates -->
@@ -429,102 +419,102 @@
         </main>
     </div>
 
-        <!-- Footer -->
-        <footer class="bg-gray-900 text-gray-300 mt-auto">
-            <div class="container mx-auto px-4 py-8 sm:py-12">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-300 mt-auto">
+        <div class="container mx-auto px-4 py-8 sm:py-12">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
 
-                    <!-- Column 1 -->
-                    <div data-aos="fade-right" data-aos-delay="100">
-                        <h3 class="text-lg sm:text-xl font-bold text-white mb-4 flex items-center">
-                            <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
-                        </h3>
-                        <p class="mb-4 text-base leading-relaxed">
-                            CardioGuard is an AI-powered diagnostic tool designed to help healthcare professionals and
-                            individuals assess the likelihood of heart disease. By combining clinical parameters and data
-                            science, it delivers fast, data-driven insights.
-                        </p>
-                        <div class="flex space-x-4">
-                            <a href="#"
-                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                    class="fab fa-facebook-f"></i></a>
-                            <a href="#"
-                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                    class="fab fa-twitter"></i></a>
-                            <a href="#"
-                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                    class="fab fa-instagram"></i></a>
-                            <a href="#"
-                                class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
-                                    class="fab fa-linkedin-in"></i></a>
-                        </div>
-                    </div>
-
-                    <!-- Column 2 -->
-                    <div data-aos="fade-up" data-aos-delay="200">
-                        <h3 class="text-lg font-semibold text-white mb-4">Quick Links</h3>
-                        <ul class="space-y-2 text-base">
-                            {% for link, text in [('/', 'Home'), ('/about', 'About Us'), ('/contact', 'Contact'), ('/form',
-                            'Predict'), ('/resources', 'Resources')] %}
-                            <li>
-                                <a href="{{ link }}"
-                                    class="hover:text-white transition-all duration-300 flex items-center group">
-                                    <span class="inline-block w-0 group-hover:w-3 transition-all duration-300">→</span> {{
-                                        text
-                                    }}
-                                </a>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-
-                    <!-- Column 3 -->
-                    <div data-aos="fade-up" data-aos-delay="300">
-                        <h3 class="text-lg font-semibold text-white mb-4">Services</h3>
-                        <ul class="space-y-2 text-base">
-                            <li><a href="#" class="hover:text-white transition-all duration-300">Remote Patient
-                                Monitoring</a></li>
-                            <li><a href="#" class="hover:text-white transition-all duration-300">Telecardiology
-                                Consultations</a></li>
-                            <li><a href="#" class="hover:text-white transition-all duration-300">Dietary Prescription</a>
-                            </li>
-                            <li><a href="#" class="hover:text-white transition-all duration-300">AI Exercise Partner</a>
-                            </li>
-                            <li><a href="#" class="hover:text-white transition-all duration-300">HealthTech</a></li>
-                        </ul>
-                    </div>
-
-                    <!-- Column 4 -->
-                    <div data-aos="fade-left" data-aos-delay="400">
-                        <h3 class="text-lg font-semibold text-white mb-4">Contact Us</h3>
-                        <ul class="space-y-3 text-base">
-                            <li class="flex items-start hover:text-white transition-all duration-300">
-                                <i class="fas fa-map-marker-alt mt-1 mr-3 text-red-500"></i>
-                                <span>BLK 4 Railway Compound, Ibadan.</span>
-                            </li>
-                            <li class="flex items-center hover:text-white transition-all duration-300">
-                                <i class="fas fa-phone mr-3 text-red-500"></i>
-                                <a href="tel:+2348066127153" class="hover:underline">+234 8066127153</a>
-                            </li>
-                            <li class="flex items-center hover:text-white transition-all duration-300">
-                                <i class="fas fa-envelope mr-3 text-red-500"></i>
-                                <a href="mailto:muftaudeenyusufbabatunde@gmail.com"
-                                    class="hover:underline break-all">muftaudeenyusufbabatunde@gmail.com</a>
-                            </li>
-                            <li class="flex items-center hover:text-white transition-all duration-300">
-                                <i class="fas fa-clock mr-3 text-red-500"></i>
-                                <span>Mon–Fri: 9AM – 10PM</span>
-                            </li>
-                        </ul>
+                <!-- Column 1 -->
+                <div data-aos="fade-right" data-aos-delay="100">
+                    <h3 class="text-lg sm:text-xl font-bold text-white mb-4 flex items-center">
+                        <span class="mr-2 animate-pulse-heart">❤️</span> CardioGuard
+                    </h3>
+                    <p class="mb-4 text-base leading-relaxed">
+                        CardioGuard is an AI-powered diagnostic tool designed to help healthcare professionals and
+                        individuals assess the likelihood of heart disease. By combining clinical parameters and data
+                        science, it delivers fast, data-driven insights.
+                    </p>
+                    <div class="flex space-x-4">
+                        <a href="#"
+                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                class="fab fa-facebook-f"></i></a>
+                        <a href="#"
+                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                class="fab fa-twitter"></i></a>
+                        <a href="#"
+                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                class="fab fa-instagram"></i></a>
+                        <a href="#"
+                            class="text-gray-400 hover:text-white transform hover:scale-125 transition-all duration-300"><i
+                                class="fab fa-linkedin-in"></i></a>
                     </div>
                 </div>
 
-                <div class="border-t border-gray-800 mt-12 pt-8 text-center text-base animate-fade-in">
-                    <p>&copy; 2025 CardioGuard. Built with <span class="text-red-500">❤️</span> by Team VitalGuide of
-                        PROGRESS ICT MEDIA CONCEPTS.</p>
+                <!-- Column 2 -->
+                <div data-aos="fade-up" data-aos-delay="200">
+                    <h3 class="text-lg font-semibold text-white mb-4">Quick Links</h3>
+                    <ul class="space-y-2 text-base">
+                        {% for link, text in [('/', 'Home'), ('/about', 'About Us'), ('/contact', 'Contact'), ('/form',
+                        'Predict'), ('/resources', 'Resources')] %}
+                        <li>
+                            <a href="{{ link }}"
+                                class="hover:text-white transition-all duration-300 flex items-center group">
+                                <span class="inline-block w-0 group-hover:w-3 transition-all duration-300">→</span> {{
+                                text
+                                }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <!-- Column 3 -->
+                <div data-aos="fade-up" data-aos-delay="300">
+                    <h3 class="text-lg font-semibold text-white mb-4">Services</h3>
+                    <ul class="space-y-2 text-base">
+                        <li><a href="#" class="hover:text-white transition-all duration-300">Remote Patient
+                                Monitoring</a></li>
+                        <li><a href="#" class="hover:text-white transition-all duration-300">Telecardiology
+                                Consultations</a></li>
+                        <li><a href="#" class="hover:text-white transition-all duration-300">Dietary Prescription</a>
+                        </li>
+                        <li><a href="#" class="hover:text-white transition-all duration-300">AI Exercise Partner</a>
+                        </li>
+                        <li><a href="#" class="hover:text-white transition-all duration-300">HealthTech</a></li>
+                    </ul>
+                </div>
+
+                <!-- Column 4 -->
+                <div data-aos="fade-left" data-aos-delay="400">
+                    <h3 class="text-lg font-semibold text-white mb-4">Contact Us</h3>
+                    <ul class="space-y-3 text-base">
+                        <li class="flex items-start hover:text-white transition-all duration-300">
+                            <i class="fas fa-map-marker-alt mt-1 mr-3 text-red-500"></i>
+                            <span>BLK 4 Railway Compound, Ibadan.</span>
+                        </li>
+                        <li class="flex items-center hover:text-white transition-all duration-300">
+                            <i class="fas fa-phone mr-3 text-red-500"></i>
+                            <a href="tel:+2348066127153" class="hover:underline">+234 8066127153</a>
+                        </li>
+                        <li class="flex items-center hover:text-white transition-all duration-300">
+                            <i class="fas fa-envelope mr-3 text-red-500"></i>
+                            <a href="mailto:muftaudeenyusufbabatunde@gmail.com"
+                                class="hover:underline break-all">muftaudeenyusufbabatunde@gmail.com</a>
+                        </li>
+                        <li class="flex items-center hover:text-white transition-all duration-300">
+                            <i class="fas fa-clock mr-3 text-red-500"></i>
+                            <span>Mon–Fri: 9AM – 10PM</span>
+                        </li>
+                    </ul>
                 </div>
             </div>
-        </footer>
+
+            <div class="border-t border-gray-800 mt-12 pt-8 text-center text-base animate-fade-in">
+                <p>&copy; 2025 CardioGuard. Built with <span class="text-red-500">❤️</span> by Team VitalGuide of
+                    PROGRESS ICT MEDIA CONCEPTS.</p>
+            </div>
+        </div>
+    </footer>
     </div>
 
     <!-- ==================== SCRIPTS ==================== -->
@@ -606,12 +596,12 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             fetchCounts();
-            setInterval(fetchCounts, 30000);        
+            setInterval(fetchCounts, 30000);
             // --- NEW: Server-Sent Events (SSE) for Real-Time Notifications ---
             console.log("Initializing real-time notifications...");
             const eventSource = new EventSource('/notifications/stream');
 
-            eventSource.onmessage = function(event) {
+            eventSource.onmessage = function (event) {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.notifications && data.notifications.length > 0) {
@@ -643,7 +633,7 @@
                 }
             };
 
-            eventSource.onerror = function(event) {
+            eventSource.onerror = function (event) {
                 if (event.eventPhase === EventSource.CLOSED) {
                     console.log("SSE connection closed.");
                     // Optionally, attempt to reconnect after a delay
@@ -669,4 +659,5 @@
         }
     </script>
 </body>
+
 </html>

@@ -1,0 +1,193 @@
+<!-- templates/doctor_appointments.html -->
+{% extends "base.html" %}
+
+{% block title %}My Appointments{% endblock %}
+
+{% block sidebar %}
+    <!-- Include the sidebar for logged-in users -->
+    {% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+        {% include 'sidebar.html' %}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
+  <div class="container mx-auto px-4 max-w-7xl">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+          <span class="bg-gradient-to-r from-red-500 to-red-700 p-2 rounded-lg text-white">📅</span>
+          My Appointments
+        </h1>
+        <p class="text-gray-600 mt-1">Manage your scheduled patient appointments</p>
+      </div>
+      <a href="{{ url_for('doctor_dashboard') }}" class="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-5 py-2.5 rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-md hover:shadow-lg transition duration-300 text-center min-w-[120px]">
+        Back to Dashboard
+      </a>
+    </div>
+
+    <!-- Stats Cards (Optional) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div class="bg-white shadow-lg rounded-2xl p-6 border border-gray-100 transition-all duration-300 hover:shadow-xl">
+        <div class="flex items-center">
+          <div class="bg-blue-100 p-3 rounded-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h2 class="text-3xl font-bold text-gray-800">{{ stats.total }}</h2>
+            <p class="text-gray-500 text-sm">Total Appointments</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white shadow-lg rounded-2xl p-6 border border-gray-100 transition-all duration-300 hover:shadow-xl">
+        <div class="flex items-center">
+          <div class="bg-green-100 p-3 rounded-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h2 class="text-3xl font-bold text-gray-800">{{ stats.confirmed }}</h2>
+            <p class="text-gray-500 text-sm">Confirmed</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white shadow-lg rounded-2xl p-6 border border-gray-100 transition-all duration-300 hover:shadow-xl">
+        <div class="flex items-center">
+          <div class="bg-yellow-100 p-3 rounded-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h2 class="text-3xl font-bold text-gray-800">{{ stats.pending }}</h2>
+            <p class="text-gray-500 text-sm">Pending</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white shadow-lg rounded-2xl p-6 border border-gray-100 transition-all duration-300 hover:shadow-xl">
+        <div class="flex items-center">
+          <div class="bg-purple-100 p-3 rounded-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h2 class="text-3xl font-bold text-gray-800">{{ stats.completed }}</h2>
+            <p class="text-gray-500 text-sm">Completed</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Appointments Section -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+      <h3 class="text-xl font-semibold mb-4 text-gray-800 flex items-center gap-2">
+        <span class="bg-gradient-to-r from-red-500 to-red-700 p-1 rounded-lg text-white text-sm">🩺</span>
+        Scheduled Appointments
+      </h3>
+      {% if appointments %}
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse">
+            <thead>
+              <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
+                <th class="py-3 px-4 rounded-l-lg">Appointment Time</th>
+                <th class="py-3 px-4">Patient Name</th>
+                <th class="py-3 px-4">Patient Email</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 rounded-r-lg">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for appt in appointments %}
+              <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
+                <td class="py-3 px-4 font-medium text-gray-800">{{ appt.appointment_time[:16] }}</td> <!-- Format as YYYY-MM-DD HH:MM -->
+                <td class="py-3 px-4">
+                  <span class="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full">
+                    {{ patient_details[appt.user_id].name if patient_details[appt.user_id] else 'Unknown' }}
+                  </span>
+                  <!-- Optional: Show patient details if available -->
+                  {% if patient_profile_details[appt.user_id] %}
+                    <br/>
+                    <span class="text-xs text-gray-500">
+                      DOB: {{ patient_profile_details[appt.user_id].date_of_birth or 'N/A' }},
+                      BG: {{ patient_profile_details[appt.user_id].blood_group or 'N/A' }},
+                      GT: {{ patient_profile_details[appt.user_id].genotype or 'N/A' }}
+                    </span>
+                  {% endif %}
+                </td>
+                <td class="py-3 px-4 text-gray-600">{{ patient_details[appt.user_id].email if patient_details[appt.user_id] else 'N/A' }}</td>
+                <td class="py-3 px-4">
+                  <span class="bg-yellow-100 text-yellow-800 text-xs px-2.5 py-1 rounded-full">
+                    {{ appt.status | title }}
+                  </span>
+                </td>
+                <td class="py-3 px-4">
+                  <!-- Join Meeting Button (if meeting URL exists and time is near) -->
+                  {% if appt.meeting_url %}
+                    {% set appt_time = appt.appointment_time | datetime_from_iso %}
+                    {% set now = now() %}
+                    {% set now_aware = now.replace(tzinfo=appt_time.tzinfo) %}
+                    {% if now_aware >= appt_time and now_aware <= appt_time + timedelta(minutes=30) %}
+                        <a href="{{ appt.meeting_url }}" target="_blank" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Join Meeting</a>
+                    {% else %}
+                        Meeting Link Ready
+                    {% endif %}
+                  {% else %}
+                    <span class="text-gray-400 text-sm">N/A</span>
+                  {% endif %}
+
+                  <!-- Action Buttons based on status -->
+                  {% if appt.status == 'pending' %}
+                    <div class="flex space-x-2 mt-2">
+                      <form method="POST" action="{{ url_for('confirm_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to confirm this appointment?');">
+                        <button type="submit" class="text-green-500 hover:text-green-700 font-medium text-sm">Confirm</button>
+                      </form>
+                      <form method="POST" action="{{ url_for('reject_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to reject this appointment?');">
+                        <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Reject</button>
+                      </form>
+                    </div>
+                  {% elif appt.status == 'confirmed' %}
+                    <div class="mt-2">
+                      <!-- Chat Link -->
+                      <a href="{{ url_for('appointment_chat', appointment_id=appt.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
+                      <!-- Start Consultation Link -->
+                      <a href="{{ url_for('create_health_record', appointment_id=appt.id) }}" class="text-green-500 hover:text-green-700 font-medium text-sm ml-2">Open a Casefile</a>
+                    </div>
+                  {% elif appt.status == 'completed' %}
+                    <!-- Link to View Health Record if it exists -->
+                    {% set record_exists = supabase.table('health_records').select('id').eq('appointment_id', appt.id).execute().data %}
+                    {% if record_exists %}
+                      <div class="mt-2">
+                        <a href="{{ url_for('view_health_record', record_id=record_exists[0].id) }}" class="text-teal-500 hover:text-teal-700 font-medium text-sm">View Record</a>
+                      </div>
+                    {% else %}
+                      <div class="mt-2">
+                        <span class="text-gray-400 text-sm">No Record</span>
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m4 4V3m4 4V3m2 8a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-gray-600">You have no scheduled appointments.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

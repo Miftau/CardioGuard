@@ -37,7 +37,7 @@ from groq import Groq
 from supabase import create_client, Client
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    send_from_directory, flash, jsonify, session
+    send_from_directory, flash, jsonify, session, Response
 )
 from flask_cors import CORS
 from flask_mail import Mail, Message
@@ -48,6 +48,7 @@ from plotly.utils import PlotlyJSONEncoder
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import re
 import shap
 import joblib
 from flask_sse import sse
@@ -219,357 +220,6 @@ BASE_COLUMNS_LIFESTYLE = [
     "age", "gender", "height", "weight", "ap_hi", "ap_lo",
     "cholesterol", "gluc", "smoke", "alco", "active"
 ]
-# ============================================================
-# Virtual Meeting System (Jitsi) Helpers
-# ============================================================
-def generate_jitsi_url(appointment_id, appointment_time_str):
-    """
-    Generates a unique Jitsi meeting URL based on appointment details.
-    Uses a deterministic hash to ensure the same appointment gets the same room.
-    """
-    # Create a unique identifier for the meeting room
-    # Combining appointment ID and time should be sufficient
-    unique_identifier = f"{appointment_id}_{appointment_time_str}"
-    # Use SHA-256 hash to create a deterministic, unique room name
-    room_hash = hashlib.sha256(unique_identifier.encode()).hexdigest()
-    # Truncate the hash for readability (e.g., first 12 characters)
-    room_name = room_hash[:12]
-    # Use a public Jitsi server or your own self-hosted one
-    jitsi_server = os.getenv("JITSI_SERVER_URL", "https://meet.jit.si") # e.g., "https://your-jitsi-instance.com"
-    return f"{jitsi_server}/{room_name}"
-# ============================================================
-# Notification System (Email) Helpers
-# ============================================================
-# ... inside app.py, add or update this function ...
-
-def send_welcome_email_if_incomplete(user_id, email, name, role):
-    """Sends a welcome email and creates an in-app notification if the user's profile is incomplete."""
-    try:
-        if role == "doctor":
-            # Fetch doctor-specific details to check completeness
-            doctor_data = supabase.table("doctors").select("bio, specialization, license_number").eq("id", user_id).single().execute().data
-            bio = doctor_data.get("bio", "").strip()
-            spec = doctor_data.get("specialization", "").strip()
-            license_num = doctor_data.get("license_number", "").strip()
-
-            if not bio or not spec or not license_num:
-                subject = "[CardioGuard] Welcome Doctor! Please Complete Your Profile"
-                body = f"""
-                Hi {name},
-
-                Welcome to CardioGuard! 🎉
-
-                To start accepting appointments, please complete your professional profile:
-                - Add your specialization
-                - Write a short bio
-                - Provide your license number
-                - Set your consultation fee
-
-                Visit your dashboard to get started:
-                {url_for('doctor_dashboard', _external=True)}
-
-                Best regards,
-                The CardioGuard Team
-                """
-                notification_message = "Welcome! Please complete your doctor profile to start accepting appointments."
-            else:
-                # Profile is complete, maybe send a different welcome or just create a notification
-                subject = "[CardioGuard] Welcome Doctor!"
-                body = f"""
-                Hi {name},
-
-                Welcome to CardioGuard! Your profile is set up and ready.
-                You can now manage your availability and see bookings.
-
-                Best regards,
-                The CardioGuard Team
-                """
-                notification_message = "Welcome! Your doctor profile is ready."
-
-        elif role == "user":
-            # For users, the welcome is simpler, just a notification might suffice initially
-            subject = "[CardioGuard] Welcome User!"
-            body = f"""
-            Hi {name},
-
-            Welcome to CardioGuard! Explore the features and take care of your heart health.
-
-            Best regards,
-            The CardioGuard Team
-            """
-            notification_message = "Welcome to CardioGuard! Explore the features."
-
-        else:
-            # For admins, maybe just a notification or a different email
-            print(f"Welcome logic not defined for role: {role}")
-            return
-
-        # Send Email
-        msg = Message(
-            subject=subject,
-            recipients=[email],
-            body=body
-        )
-        mail.send(msg)
-        print(f"✅ Welcome email sent to {email}")
-
-        # Create In-App Notification
-        create_notification(user_id, "welcome", notification_message, channel="email") # Channel is email as source
-
-    except Exception as e:
-        print(f"Failed to check profile completeness, send welcome email, or create notification for user {user_id}: {e}")
-
-
-def send_appointment_reminder_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
-    """
-    Sends an email reminder for an appointment.
-    """
-    try:
-        msg = Message(
-            subject="[CardioGuard] Appointment Reminder",
-            recipients=[user_email],
-            body=f"""
-            Dear {user_name},
-            This is a friendly reminder that you have an appointment scheduled with Dr. {doctor_name} on {appointment_time_str}.
-            Please ensure you are ready for the session.
-            Best regards,
-            The CardioGuard Team
-            """
-        )
-        mail.send(msg)
-        print(f"✅ Reminder email sent to {user_email} for appointment {appointment_id}")
-        # Optionally, log this to the 'notifications' table
-        supabase.table("notifications").insert({
-            "user_id": session.get("user_id"), # This might need adjustment if called outside a request context
-            "appointment_id": appointment_id,
-            "type": "appointment_reminder",
-            "message": f"Reminder for appointment with Dr. {doctor_name} on {appointment_time_str}",
-            "channel": "email",
-            "status": "sent"
-        }).execute()
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send reminder email for appointment {appointment_id}: {e}")
-        # Optionally, log failure to the 'notifications' table
-        try:
-            supabase.table("notifications").insert({
-                "user_id": session.get("user_id"), # This might need adjustment if called outside a request context
-                "appointment_id": appointment_id,
-                "type": "appointment_reminder",
-                "message": f"Failed to send reminder for appointment with Dr. {doctor_name} on {appointment_time_str}",
-                "channel": "email",
-                "status": "failed",
-                "message": str(e) # Store error details
-            }).execute()
-        except Exception as log_e:
-            print(f"❌ Failed to log notification failure: {log_e}")
-        return False
-
-
-def send_appointment_confirmation_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url):
-    """
-    Sends an email confirmation to the user for a booked appointment.
-    """
-    try:
-        msg = Message(
-            subject="[CardioGuard] Appointment Confirmed",
-            recipients=[user_email],
-            body=f"""
-            Dear {user_name},
-            Your appointment with Dr. {doctor_name} on {appointment_time_str} has been confirmed.
-            Meeting Link: {meeting_url}
-            Please ensure you are ready for the session.
-            Best regards,
-            The CardioGuard Team
-            """
-        )
-        mail.send(msg)
-        print(f"✅ Confirmation email sent to {user_email} for appointment {appointment_id}")
-        # Optionally, log this to the 'notifications' table
-        supabase.table("notifications").insert({
-            "user_id": session.get("user_id"), # Note: This might be the user booking, but for logging the action
-            "appointment_id": appointment_id,
-            "type": "appointment_confirmation",
-            "message": f"Confirmation email for appointment with Dr. {doctor_name} on {appointment_time_str}",
-            "channel": "email",
-            "status": "sent"
-        }).execute()
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send confirmation email for appointment {appointment_id}: {e}")
-        # Optionally, log failure
-        try:
-            supabase.table("notifications").insert({
-                "user_id": session.get("user_id"),
-                "appointment_id": appointment_id,
-                "type": "appointment_confirmation",
-                "message": f"Failed to send confirmation email for appointment with Dr. {doctor_name} on {appointment_time_str}",
-                "channel": "email",
-                "status": "failed",
-                "details": str(e)
-            }).execute()
-        except Exception as log_e:
-            print(f"❌ Failed to log notification failure: {log_e}")
-        return False
-
-def send_appointment_confirmed_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url):
-    """
-    Sends an email to the user when a doctor confirms their appointment.
-    """
-    try:
-        msg = Message(
-            subject="[CardioGuard] Appointment Confirmed by Doctor",
-            recipients=[user_email],
-            body=f"""
-            Dear {user_name},
-            Dr. {doctor_name} has confirmed your appointment scheduled for {appointment_time_str}.
-            Meeting Link: {meeting_url}
-            Please ensure you are ready for the session.
-            Best regards,
-            The CardioGuard Team
-            """
-        )
-        mail.send(msg)
-        print(f"✅ Confirmed by doctor email sent to {user_email} for appointment {appointment_id}")
-        # Optionally, log this to the 'notifications' table
-        supabase.table("notifications").insert({
-            "user_id": session.get("user_id"), # This might be the doctor's ID when called from the doctor's action
-            "appointment_id": appointment_id,
-            "type": "appointment_confirmed_by_doctor_email",
-            "message": f"Confirmation email sent to user for appointment with Dr. {doctor_name} on {appointment_time_str}",
-            "channel": "email",
-            "status": "sent"
-        }).execute()
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send confirmed by doctor email for appointment {appointment_id}: {e}")
-        # Optionally, log failure
-        try:
-            supabase.table("notifications").insert({
-                "user_id": session.get("user_id"),
-                "appointment_id": appointment_id,
-                "type": "appointment_confirmed_by_doctor_email",
-                "message": f"Failed to send confirmed by doctor email for appointment with Dr. {doctor_name} on {appointment_time_str}",
-                "channel": "email",
-                "status": "failed",
-                "details": str(e)
-            }).execute()
-        except Exception as log_e:
-            print(f"❌ Failed to log notification failure: {log_e}")
-        return False
-
-def send_appointment_rejected_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
-    """
-    Sends an email to the user when a doctor rejects their appointment.
-    """
-    try:
-        msg = Message(
-            subject="[CardioGuard] Appointment Rejected by Doctor",
-            recipients=[user_email],
-            body=f"""
-            Dear {user_name},
-            Dr. {doctor_name} has rejected your appointment request scheduled for {appointment_time_str}.
-            Please try booking another time.
-            Best regards,
-            The CardioGuard Team
-            """
-        )
-        mail.send(msg)
-        print(f"✅ Rejected by doctor email sent to {user_email} for appointment {appointment_id}")
-        # Optionally, log this to the 'notifications' table
-        supabase.table("notifications").insert({
-            "user_id": session.get("user_id"), # This might be the doctor's ID when called from the doctor's action
-            "appointment_id": appointment_id,
-            "type": "appointment_rejected_by_doctor_email",
-            "message": f"Rejection email sent to user for appointment with Dr. {doctor_name} on {appointment_time_str}",
-            "channel": "email",
-            "status": "sent"
-        }).execute()
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send rejected by doctor email for appointment {appointment_id}: {e}")
-        # Optionally, log failure
-        try:
-            supabase.table("notifications").insert({
-                "user_id": session.get("user_id"),
-                "appointment_id": appointment_id,
-                "type": "appointment_rejected_by_doctor_email",
-                "message": f"Failed to send rejected by doctor email for appointment with Dr. {doctor_name} on {appointment_time_str}",
-                "channel": "email",
-                "status": "failed",
-                "details": str(e)
-            }).execute()
-        except Exception as log_e:
-            print(f"❌ Failed to log notification failure: {log_e}")
-        return False
-
-
-def send_appointment_confirmed_to_doctor_email(appointment_id, doctor_email, user_name, doctor_name, appointment_time_str, meeting_url):
-    """
-    Sends an email notification to the doctor about a new booking.
-    """
-    try:
-        msg = Message(
-            subject="[CardioGuard] New Appointment Booked",
-            recipients=[doctor_email],
-            body=f"""
-            Dr. {doctor_name},
-            A new appointment has been booked with you by {user_name} on {appointment_time_str}.
-            Meeting Link: {meeting_url}
-            Please check your dashboard for details.
-            Best regards,
-            The CardioGuard Team
-            """
-        )
-        mail.send(msg)
-        print(f"✅ Confirmation email sent to doctor {doctor_email} for appointment {appointment_id}")
-        # Optionally, log this to the 'notifications' table for the doctor
-        supabase.table("notifications").insert({
-            "user_id": session.get("doctor_id"), # This might be the doctor booking, but for logging the action - adjust if called from user booking context
-            "appointment_id": appointment_id,
-            "type": "appointment_booked_doctor_notify",
-            "message": f"Notification email to doctor about appointment with {user_name} on {appointment_time_str}",
-            "channel": "email",
-            "status": "sent"
-        }).execute()
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send confirmation email to doctor for appointment {appointment_id}: {e}")
-        # Optionally, log failure
-        try:
-            supabase.table("notifications").insert({
-                "user_id": session.get("doctor_id"),
-                "appointment_id": appointment_id,
-                "type": "appointment_booked_doctor_notify",
-                "message": f"Failed to send notification email to doctor about appointment with {user_name} on {appointment_time_str}",
-                "channel": "email",
-                "status": "failed",
-                "details": str(e)
-            }).execute()
-        except Exception as log_e:
-            print(f"❌ Failed to log notification failure: {log_e}")
-        return False
-
-def create_notification(user_id, notification_type, message, channel="in_app", is_read=False):
-    """
-    Creates a notification entry in the Supabase 'notifications' table.
-    """
-    try:
-        supabase.table("notifications").insert({
-            "user_id": user_id,
-            "type": notification_type,
-            "message": message,
-            "channel": channel,
-            "is_read": is_read
-        }).execute()
-        print(f"✅ Notification '{notification_type}' created for user {user_id}")
-        return True
-    except Exception as e:
-        print(f"❌ Failed to create notification for user {user_id}: {e}")
-        return False
-
-
-
 
 # ============================================================
 # Utility Functions
@@ -1099,6 +749,640 @@ def check_subscription_access(f):
     return decorated_function
 # ensure files on startup
 ensure_model_files()
+
+
+# --- Helper Functions ---
+
+def get_user_role(user_id):
+    """Helper to determine the role of a user from the database."""
+    try:
+        # Check 'doctors' table
+        doctor_resp = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
+        if doctor_resp.data:
+            return "doctor"
+    except Exception as e:
+        # If not found in doctors, check users
+        if "PGRST116" not in str(e) and "0 rows" not in str(e):
+            print(f"Error checking 'doctors' table for {user_id}: {e}")
+
+    try:
+        # Check 'users' table (default role)
+        user_resp = supabase.table("users").select("id").eq("id", user_id).single().execute()
+        if user_resp.data:
+            return "user"
+    except Exception as e:
+        if "PGRST116" not in str(e) and "0 rows" not in str(e):
+            print(f"Error checking 'users' table for {user_id}: {e}")
+
+    try:
+        # Check 'admins' table (if you have one)
+        admin_resp = supabase.table("admins").select("id").eq("id", user_id).single().execute()
+        if admin_resp.data:
+            return "admin"
+    except Exception as e:
+        if "PGRST116" not in str(e) and "0 rows" not in str(e):
+            print(f"Error checking 'admins' table for {user_id}: {e}")
+
+    return "unknown" # Should not happen if user is authenticated
+
+def validate_date_format(date_string, format_str="%Y-%m-%d"):
+    """Validates if a date string matches the expected format."""
+    try:
+        datetime.strptime(date_string, format_str)
+        return True
+    except ValueError:
+        return False
+
+def validate_uuid_format(uuid_string):
+    """Basic validation for UUID format."""
+    uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+    return bool(uuid_pattern.match(uuid_string))
+
+def validate_json_string(json_string):
+    """Validates if a string is valid JSON."""
+    try:
+        json.loads(json_string)
+        return True
+    except ValueError:
+        return False
+
+# --- Validation Functions for specific data types ---
+
+def validate_patient_profile_data(data):
+    """Validates data for patient profile updates."""
+    errors = []
+    # Example validation for date_of_birth
+    dob = data.get("date_of_birth")
+    if dob and not validate_date_format(dob):
+        errors.append("Date of birth must be in YYYY-MM-DD format.")
+    # Add more validations as needed
+    return errors
+
+def validate_health_record_data(data):
+    """Validates data for creating/updating health records."""
+    errors = []
+    severity = data.get("severity")
+    if severity and severity not in ["Mild", "Moderate", "Severe"]:
+        errors.append("Invalid severity value.")
+    # Validate appointment_id if present
+    appt_id = data.get("appointment_id")
+    if appt_id and not validate_uuid_format(appt_id):
+         errors.append("Invalid appointment ID format.")
+    # Validate JSON fields
+    if data.get("past_medical_history") and not validate_json_string(data.get("past_medical_history")):
+        errors.append("Past Medical History must be valid JSON.")
+    if data.get("family_medical_history") and not validate_json_string(data.get("family_medical_history")):
+        errors.append("Family Medical History must be valid JSON.")
+    if data.get("allergies") and not validate_json_string(data.get("allergies")):
+        errors.append("Allergies must be valid JSON.")
+    if data.get("current_medications") and not validate_json_string(data.get("current_medications")):
+        errors.append("Current Medications must be valid JSON.")
+    # Add more validations for other fields as needed
+    return errors
+
+def validate_vital_signs_data(data):
+    """Validates data for vital signs."""
+    errors = []
+    try:
+        # Example: Validate BP ranges (these are example ranges, adjust as needed)
+        sbp = data.get("systolic_bp")
+        dbp = data.get("diastolic_bp")
+        if sbp is not None and (int(sbp) < 0 or int(sbp) > 300):
+            errors.append("Systolic BP must be between 0 and 300.")
+        if dbp is not None and (int(dbp) < 0 or int(dbp) > 200):
+            errors.append("Diastolic BP must be between 0 and 200.")
+
+        pulse = data.get("pulse_rate")
+        if pulse is not None and (int(pulse) < 0 or int(pulse) > 300):
+            errors.append("Pulse Rate must be between 0 and 300.")
+
+        temp = data.get("temperature")
+        if temp is not None:
+            temp_val = float(temp)
+            if temp_val < 30.0 or temp_val > 45.0: # Example range
+                errors.append("Temperature must be between 30.0 and 45.0 Celsius.")
+
+        # Add more validations for respiratory_rate, oxygen_saturation, weight_kg, height_cm, bmi
+    except ValueError:
+        errors.append("Numeric values for vital signs must be valid numbers.")
+    return errors
+
+def validate_prescription_data(data):
+    """Validates data for prescriptions."""
+    errors = []
+    medication_name = data.get("medication_name")
+    if not medication_name or medication_name.strip() == "":
+        errors.append("Medication name is required.")
+    # Add more validations as needed (dosage format, quantity, etc.)
+    return errors
+
+def validate_investigation_data(data):
+    """Validates data for investigations."""
+    errors = []
+    test_name = data.get("test_name")
+    if not test_name or test_name.strip() == "":
+        errors.append("Test name is required.")
+    status = data.get("status")
+    if status and status not in ["Ordered", "In Progress", "Completed", "Pending"]:
+        errors.append("Invalid investigation status.")
+    priority = data.get("priority")
+    if priority and priority not in ["Routine", "Urgent", "Stat"]:
+        errors.append("Invalid investigation priority.")
+    # Add more validations as needed
+    return errors
+
+def validate_billing_data(data):
+    """Validates data for billing records."""
+    errors = []
+    try:
+        # Validate numeric amounts
+        consultation_fee = data.get("consultation_fee")
+        if consultation_fee is not None: float(consultation_fee)
+        test_fees = data.get("test_fees")
+        if test_fees is not None: float(test_fees)
+        medication_cost = data.get("medication_cost")
+        if medication_cost is not None: float(medication_cost)
+        total_amount = data.get("total_amount")
+        if total_amount is not None: float(total_amount)
+
+        status = data.get("payment_status")
+        if status and status not in ["Pending", "Paid", "Partially Paid", "Cancelled"]:
+            errors.append("Invalid payment status.")
+    except ValueError:
+        errors.append("Amounts must be valid numbers.")
+    # Add more validations as needed
+    return errors
+
+def validate_consent_data(data):
+    """Validates data for consents."""
+    errors = []
+    consent_type = data.get("consent_type")
+    if not consent_type or consent_type.strip() == "":
+        errors.append("Consent type is required.")
+    consent_given = data.get("consent_given")
+    if consent_given is not None and consent_given not in [True, False]:
+        errors.append("Consent given must be true or false.")
+    consent_date = data.get("consent_date")
+    if consent_date and not validate_date_format(consent_date):
+        errors.append("Consent date must be in YYYY-MM-DD format.")
+    # Add more validations as needed
+    return errors
+
+# --- Access Control Decorators ---
+
+def patient_required(f):
+    """Decorator to ensure the user is a patient."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get("role") != "user":
+            flash("Access denied. Patients only.", "danger")
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def doctor_required(f):
+    """Decorator to ensure the user is a doctor."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get("role") != "doctor":
+            flash("Access denied. Doctors only.", "danger")
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def ensure_user_is_owner_or_doctor(f):
+    """
+    Decorator to ensure the logged-in user is the patient owner
+    or the assigned doctor for the specified health record.
+    Expects 'record_id' to be passed as a route argument.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_id = session.get("id")
+        user_role = session.get("role")
+        record_id = kwargs.get('record_id')
+
+        if not record_id or not validate_uuid_format(record_id):
+            flash("Invalid record ID.", "danger")
+            return redirect(url_for("user_dashboard" if user_role == "user" else "doctor_dashboard"))
+
+        try:
+            # Fetch the health record to check ownership/assignment
+            record_data = supabase.table("health_records").select("patient_id, doctor_id").eq("id", record_id).single().execute().data
+            if not record_data:
+                flash("Record not found.", "danger")
+                return redirect(url_for("user_dashboard" if user_role == "user" else "doctor_dashboard"))
+
+            patient_id = record_data["patient_id"]
+            doctor_id = record_data["doctor_id"]
+
+            if user_role == "user" and user_id == patient_id:
+                # User is the patient owner
+                pass
+            elif user_role == "doctor" and user_id == doctor_id:
+                # User is the assigned doctor
+                pass
+            else:
+                flash("Access denied. You do not have permission to view this record.", "danger")
+                return redirect(url_for("user_dashboard" if user_role == "user" else "doctor_dashboard"))
+
+        except Exception as e:
+            print(f"Error checking record ownership: {e}")
+            flash("Access denied or record not found.", "danger")
+            return redirect(url_for("user_dashboard" if user_role == "user" else "doctor_dashboard"))
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+def ensure_doctor_owns_appointment(f):
+    """
+    Decorator to ensure the logged-in doctor is the one assigned to the specified appointment.
+    Expects 'appointment_id' to be passed as a route argument.
+    Used for creating health records linked to an appointment.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        doctor_id = session.get("id")
+        appointment_id = kwargs.get('appointment_id') # Or from request body if needed
+
+        if not appointment_id or not validate_uuid_format(appointment_id):
+            flash("Invalid appointment ID.", "danger")
+            return redirect(url_for("doctor_dashboard"))
+
+        try:
+            # Fetch the appointment to check assignment
+            appt_data = supabase.table("appointments").select("doctor_id").eq("id", appointment_id).single().execute().data
+            if not appt_data:
+                flash("Appointment not found.", "danger")
+                return redirect(url_for("doctor_dashboard"))
+
+            assigned_doctor_id = appt_data["doctor_id"]
+
+            if doctor_id != assigned_doctor_id:
+                flash("Access denied. You are not assigned to this appointment.", "danger")
+                return redirect(url_for("doctor_dashboard"))
+
+        except Exception as e:
+            print(f"Error checking appointment ownership: {e}")
+            flash("Access denied or appointment not found.", "danger")
+            return redirect(url_for("doctor_dashboard"))
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# ============================================================
+# Virtual Meeting System (Jitsi) Helpers
+# ============================================================
+def generate_jitsi_url(appointment_id, appointment_time_str):
+    """
+    Generates a unique Jitsi meeting URL based on appointment details.
+    Uses a deterministic hash to ensure the same appointment gets the same room.
+    """
+    # Create a unique identifier for the meeting room
+    # Combining appointment ID and time should be sufficient
+    unique_identifier = f"{appointment_id}_{appointment_time_str}"
+    # Use SHA-256 hash to create a deterministic, unique room name
+    room_hash = hashlib.sha256(unique_identifier.encode()).hexdigest()
+    # Truncate the hash for readability (e.g., first 12 characters)
+    room_name = room_hash[:12]
+    # Use a public Jitsi server or your own self-hosted one
+    jitsi_server = os.getenv("JITSI_SERVER_URL", "https://meet.jit.si") # e.g., "https://your-jitsi-instance.com"
+    return f"{jitsi_server}/{room_name}"
+# ============================================================
+# Notification System (Email) Helpers
+# ============================================================
+# ... inside app.py, add or update this function ...
+
+def send_welcome_email_if_incomplete(user_id, email, name, role):
+    """Sends a welcome email and creates an in-app notification if the user's profile is incomplete."""
+    try:
+        if role == "doctor":
+            # Fetch doctor-specific details to check completeness
+            doctor_data = supabase.table("doctors").select("bio, specialization, license_number").eq("id", user_id).single().execute().data
+            bio = doctor_data.get("bio", "").strip()
+            spec = doctor_data.get("specialization", "").strip()
+            license_num = doctor_data.get("license_number", "").strip()
+
+            if not bio or not spec or not license_num:
+                subject = "[CardioGuard] Welcome Doctor! Please Complete Your Profile"
+                body = f"""
+                Hi {name},
+
+                Welcome to CardioGuard! 🎉
+
+                To start accepting appointments, please complete your professional profile:
+                - Add your specialization
+                - Write a short bio
+                - Provide your license number
+                - Set your consultation fee
+
+                Visit your dashboard to get started:
+                {url_for('doctor_dashboard', _external=True)}
+
+                Best regards,
+                The CardioGuard Team
+                """
+                notification_message = "Welcome! Please complete your doctor profile to start accepting appointments."
+            else:
+                # Profile is complete, maybe send a different welcome or just create a notification
+                subject = "[CardioGuard] Welcome Doctor!"
+                body = f"""
+                Hi {name},
+
+                Welcome to CardioGuard! Your profile is set up and ready.
+                You can now manage your availability and see bookings.
+
+                Best regards,
+                The CardioGuard Team
+                """
+                notification_message = "Welcome! Your doctor profile is ready."
+
+        elif role == "user":
+            # For users, the welcome is simpler, just a notification might suffice initially
+            subject = "[CardioGuard] Welcome User!"
+            body = f"""
+            Hi {name},
+
+            Welcome to CardioGuard! Explore the features and take care of your heart health.
+
+            Best regards,
+            The CardioGuard Team
+            """
+            notification_message = "Welcome to CardioGuard! Explore the features."
+
+        else:
+            # For admins, maybe just a notification or a different email
+            print(f"Welcome logic not defined for role: {role}")
+            return
+
+        # Send Email
+        msg = Message(
+            subject=subject,
+            recipients=[email],
+            body=body
+        )
+        mail.send(msg)
+        print(f"✅ Welcome email sent to {email}")
+
+        # Create In-App Notification
+        create_notification(user_id, "welcome", notification_message, channel="email") # Channel is email as source
+
+    except Exception as e:
+        print(f"Failed to check profile completeness, send welcome email, or create notification for user {user_id}: {e}")
+
+
+def send_appointment_reminder_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
+    """
+    Sends an email reminder for an appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Reminder",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            This is a friendly reminder that you have an appointment scheduled with Dr. {doctor_name} on {appointment_time_str}.
+            Please ensure you are ready for the session.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Reminder email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # This might need adjustment if called outside a request context
+            "appointment_id": appointment_id,
+            "type": "appointment_reminder",
+            "message": f"Reminder for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send reminder email for appointment {appointment_id}: {e}")
+        # Optionally, log failure to the 'notifications' table
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"), # This might need adjustment if called outside a request context
+                "appointment_id": appointment_id,
+                "type": "appointment_reminder",
+                "message": f"Failed to send reminder for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "message": str(e) # Store error details
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+
+def send_appointment_confirmation_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url):
+    """
+    Sends an email confirmation to the user for a booked appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Confirmed",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            Your appointment with Dr. {doctor_name} on {appointment_time_str} has been confirmed.
+            Meeting Link: {meeting_url}
+            Please ensure you are ready for the session.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Confirmation email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # Note: This might be the user booking, but for logging the action
+            "appointment_id": appointment_id,
+            "type": "appointment_confirmation",
+            "message": f"Confirmation email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send confirmation email for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_confirmation",
+                "message": f"Failed to send confirmation email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+def send_appointment_confirmed_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str, meeting_url):
+    """
+    Sends an email to the user when a doctor confirms their appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Confirmed by Doctor",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            Dr. {doctor_name} has confirmed your appointment scheduled for {appointment_time_str}.
+            Meeting Link: {meeting_url}
+            Please ensure you are ready for the session.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Confirmed by doctor email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # This might be the doctor's ID when called from the doctor's action
+            "appointment_id": appointment_id,
+            "type": "appointment_confirmed_by_doctor_email",
+            "message": f"Confirmation email sent to user for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send confirmed by doctor email for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_confirmed_by_doctor_email",
+                "message": f"Failed to send confirmed by doctor email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+def send_appointment_rejected_to_user_email(appointment_id, user_email, user_name, doctor_name, appointment_time_str):
+    """
+    Sends an email to the user when a doctor rejects their appointment.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] Appointment Rejected by Doctor",
+            recipients=[user_email],
+            body=f"""
+            Dear {user_name},
+            Dr. {doctor_name} has rejected your appointment request scheduled for {appointment_time_str}.
+            Please try booking another time.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Rejected by doctor email sent to {user_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table
+        supabase.table("notifications").insert({
+            "user_id": session.get("user_id"), # This might be the doctor's ID when called from the doctor's action
+            "appointment_id": appointment_id,
+            "type": "appointment_rejected_by_doctor_email",
+            "message": f"Rejection email sent to user for appointment with Dr. {doctor_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send rejected by doctor email for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("user_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_rejected_by_doctor_email",
+                "message": f"Failed to send rejected by doctor email for appointment with Dr. {doctor_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+
+def send_appointment_confirmed_to_doctor_email(appointment_id, doctor_email, user_name, doctor_name, appointment_time_str, meeting_url):
+    """
+    Sends an email notification to the doctor about a new booking.
+    """
+    try:
+        msg = Message(
+            subject="[CardioGuard] New Appointment Booked",
+            recipients=[doctor_email],
+            body=f"""
+            Dr. {doctor_name},
+            A new appointment has been booked with you by {user_name} on {appointment_time_str}.
+            Meeting Link: {meeting_url}
+            Please check your dashboard for details.
+            Best regards,
+            The CardioGuard Team
+            """
+        )
+        mail.send(msg)
+        print(f"✅ Confirmation email sent to doctor {doctor_email} for appointment {appointment_id}")
+        # Optionally, log this to the 'notifications' table for the doctor
+        supabase.table("notifications").insert({
+            "user_id": session.get("doctor_id"), # This might be the doctor booking, but for logging the action - adjust if called from user booking context
+            "appointment_id": appointment_id,
+            "type": "appointment_booked_doctor_notify",
+            "message": f"Notification email to doctor about appointment with {user_name} on {appointment_time_str}",
+            "channel": "email",
+            "status": "sent"
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send confirmation email to doctor for appointment {appointment_id}: {e}")
+        # Optionally, log failure
+        try:
+            supabase.table("notifications").insert({
+                "user_id": session.get("doctor_id"),
+                "appointment_id": appointment_id,
+                "type": "appointment_booked_doctor_notify",
+                "message": f"Failed to send notification email to doctor about appointment with {user_name} on {appointment_time_str}",
+                "channel": "email",
+                "status": "failed",
+                "details": str(e)
+            }).execute()
+        except Exception as log_e:
+            print(f"❌ Failed to log notification failure: {log_e}")
+        return False
+
+def create_notification(user_id, notification_type, message, channel="in_app", is_read=False):
+    """
+    Creates a notification entry in the Supabase 'notifications' table.
+    """
+    try:
+        supabase.table("notifications").insert({
+            "user_id": user_id,
+            "type": notification_type,
+            "message": message,
+            "channel": channel,
+            "is_read": is_read
+        }).execute()
+        print(f"✅ Notification '{notification_type}' created for user {user_id}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to create notification for user {user_id}: {e}")
+        return False
+
+
+
+
 # ============================================================
 # Routes - Authentication
 # ============================================================
@@ -1498,44 +1782,36 @@ def notifications_stream():
         return jsonify({"error": "Unauthorized"}), 401
 
     def event_stream():
-        # This is a generator function that yields SSE data
-        while True:
-            try:
-                # Fetch the latest unread notifications for the user
-                # This is a simplified query - you might want to fetch only new ones since last check
-                # or use a more efficient method like listening to a Redis channel if using Redis pub/sub.
-                # For now, we'll fetch the most recent 5 unread notifications.
-                res = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(5).execute()
-                notifications = res.data if res.data else []
+        # Use the user_id from the outer scope
+        if not user_id:
+            return
 
-                if notifications:
-                    # Send the list of notifications as a single event
-                    # Format the data for SSE
-                    import json
-                    data_str = json.dumps({"notifications": notifications})
-                    yield f"data: {data_str}\n\n"
-                    # Optional: Mark these specific notifications as 'read' here if desired
-                    # notification_ids = [n['id'] for n in notifications]
-                    # supabase.table("notifications").update({"is_read": True}).in_("id", notification_ids).execute()
-                else:
-                    # Send a heartbeat or an empty update to keep the connection alive
-                    yield f"data: {json.dumps({'notifications': []})}\n\n"
+        try:
+            # Example: Listen for new notifications for the user
+            # Replace with your actual notification logic
+            while True:
+                # Simulate checking for new notifications (replace with real logic)
+                # time.sleep(30) # Example sleep, adjust as needed
+                # new_notifications = check_for_notifications(user_id)
 
-                # Wait for a short period before checking again
-                time.sleep(10) # Check every 10 seconds (adjust as needed)
+                # Example data to send
+                data = {'notifications': []} # Replace with actual data
+                # Use the imported 'json' module here
+                yield f"data: {json.dumps(data)}\n\n" # Ensure 'json' module is accessible here
+                time.sleep(30) # Example interval
+        except GeneratorExit:
+            # Client disconnected, clean up if necessary
+            print(f"SSE stream closed for user {user_id}")
+        except Exception as e:
+            # Use the imported 'json' module here as well
+            # Be careful not to shadow 'json' again inside this exception block
+            print(f"Error in SSE stream for user {user_id}: {e}")
+            # It's tricky to send an error message via SSE once started,
+            # but you can log it or handle it appropriately.
+            # yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n" # Ensure 'json' is accessible
+            # raise # Re-raising might be necessary depending on your SSE setup
+            pass # Or just log and continue/exit gracefully
 
-            except GeneratorExit:
-                # This exception is raised when the client closes the connection
-                print(f"SSE connection closed for user {user_id}")
-                break
-            except Exception as e:
-                print(f"Error in SSE stream for user {user_id}: {e}")
-                # Optionally, send an error message to the client
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
-                time.sleep(5) # Wait a bit before retrying
-
-    # Return the generator as a streaming response with the correct content type
-    from flask import Response
     return Response(event_stream(), mimetype="text/event-stream")
 
 
@@ -2580,6 +2856,59 @@ def doctor_dashboard():
         timedelta=timedelta
     )
     
+
+@app.route('/doctor/appointments')
+@login_required
+@doctor_required
+def doctor_appointments():
+    """
+    List all appointments assigned to the logged-in doctor.
+    Renders an HTML template.
+    """
+    doctor_id = session.get("id") # For doctors, session['id'] is their doctor_id
+    print(f"DEBUG: Session ID in doctor_appointments: {doctor_id}") # Debug print
+    print(f"DEBUG: Session contents: {session}") # Debug print
+
+    if not doctor_id:
+        flash("Session error. Please log in again.", "danger")
+        return redirect(url_for("login"))
+
+    try:
+        # Fetch appointments where the user is the doctor
+        appointments_resp = supabase.table("appointments").select("*").eq("doctor_id", doctor_id).order("appointment_time").execute()
+        appointments = appointments_resp.data
+
+        # Fetch patient details for the appointments
+        patient_ids = [appt["user_id"] for appt in appointments if appt.get("user_id")]
+        patient_details = {}
+        if patient_ids:
+            patients_resp = supabase.table("users").select("id, name, email").in_("id", patient_ids).execute()
+            patient_details = {p["id"]: p for p in patients_resp.data}
+
+        # Optional: Fetch patient profiles for additional details (e.g., DOB, blood group)
+        patient_profile_details = {}
+        if patient_ids:
+            profiles_resp = supabase.table("patient_profiles").select("id, date_of_birth, blood_group, genotype").in_("id", patient_ids).execute()
+            patient_profile_details = {prof["id"]: prof for prof in profiles_resp.data}
+
+        # Calculate counts for stats (optional, for the template)
+        total_appointments = len(appointments)
+        confirmed_appointments = [appt for appt in appointments if appt.get("status") == "confirmed"]
+        pending_appointments = [appt for appt in appointments if appt.get("status") == "pending"]
+        completed_appointments = [appt for appt in appointments if appt.get("status") == "completed"] # Assuming 'completed' status exists or is handled differently
+
+        stats = {
+            "total": total_appointments,
+            "confirmed": len(confirmed_appointments),
+            "pending": len(pending_appointments),
+            "completed": len(completed_appointments)
+        }
+
+        return render_template("doctor_appointments.html", appointments=appointments, patient_details=patient_details, patient_profile_details=patient_profile_details, stats=stats, timedelta=timedelta)
+    except Exception as e:
+        print(f"Error fetching doctor appointments: {e}")
+        flash("Error loading appointments. Please try again later.", "danger")
+        return redirect(url_for("doctor_dashboard"))
     
   
 @app.route('/rate_doctor/<doctor_id>', methods=['POST'])
@@ -2806,6 +3135,453 @@ def log_activity(user_id, plan_id, activity_type):
         "plan_id": plan_id,
         "activity_type": activity_type
     }).execute()
+
+
+# --- Health Case File Routes ---
+@app.route('/patient_health_records')
+@login_required
+@patient_required
+def patient_health_records():
+    """
+    List all health records for the logged-in patient.
+    Renders an HTML template.
+    """
+    user_id = session.get("id")
+    print(f"DEBUG: Session ID in patient_health_records: {user_id}") # Add this line for debugging
+    print(f"DEBUG: Session contents: {session}") # Add this line for debugging
+
+    if not user_id: # Add this check
+        flash("Session error. Please log in again.", "danger")
+        return redirect(url_for("login"))
+
+    try:
+        # Fetch health records where the user is the patient
+        records_resp = supabase.table("health_records").select("*").eq("patient_id", user_id).order("created_at", desc=True).execute()
+        records = records_resp.data
+
+        # Optionally fetch related appointment details for context
+        appointment_ids = [r["appointment_id"] for r in records if r.get("appointment_id")]
+        appointments = {}
+        if appointment_ids:
+             appts_resp = supabase.table("appointments").select("id, appointment_time, status, doctor_id").in_("id", appointment_ids).execute()
+             appointments = {appt["id"]: appt for appt in appts_resp.data}
+
+        # Fetch doctor names for the appointments
+        doctor_ids = list(set([appt["doctor_id"] for appt in appointments.values()]))
+        doctors = {}
+        if doctor_ids:
+            doctors_resp = supabase.table("users").select("id, name").in_("id", doctor_ids).execute()
+            doctors = {doc["id"]: doc["name"] for doc in doctors_resp.data}
+
+        return render_template("patient_health_records.html", records=records, appointments=appointments, doctors=doctors)
+    except Exception as e:
+        print(f"Error fetching patient records: {e}")
+        flash("Error loading records. Please try again later.", "danger")
+        return redirect(url_for("user_dashboard"))
+
+@app.route('/doctor_health_records')
+@login_required
+@doctor_required
+def doctor_health_records():
+    """
+    List all health records for appointments handled by the logged-in doctor.
+    Renders an HTML template.
+    """
+    user_id = session.get("id") # Doctor ID
+    try:
+        # Fetch health records where the user is the doctor
+        records_resp = supabase.table("health_records").select("*").eq("doctor_id", user_id).order("created_at", desc=True).execute()
+        records = records_resp.data
+
+        # Optionally fetch related appointment and patient details
+        appointment_ids = [r["appointment_id"] for r in records if r.get("appointment_id")]
+        patient_ids = [r["patient_id"] for r in records]
+        appointments = {}
+        patients = {}
+
+        if appointment_ids:
+             appts_resp = supabase.table("appointments").select("id, appointment_time, status, user_id").in_("id", appointment_ids).execute()
+             appointments = {appt["id"]: appt for appt in appts_resp.data}
+        if patient_ids:
+             patients_resp = supabase.table("users").select("id, name, email").in_("id", patient_ids).execute()
+             patients = {p["id"]: p for p in patients_resp.data}
+
+        return render_template("doctor_health_records.html", records=records, appointments=appointments, patients=patients)
+    except Exception as e:
+        print(f"Error fetching doctor records: {e}")
+        flash("Error loading records. Please try again later.", "danger")
+        return redirect(url_for("doctor_dashboard"))
+
+@app.route('/health_record/<record_id>')
+@login_required
+@ensure_user_is_owner_or_doctor
+def view_health_record(record_id):
+    """
+    View a specific health record. Access controlled by decorator.
+    Renders an HTML template.
+    """
+    try:
+        # Fetch the main health record
+        record_resp = supabase.table("health_records").select("*").eq("id", record_id).single().execute()
+        if not record_resp.data:
+            flash("Record not found.", "danger")
+            return redirect(url_for("user_dashboard" if session.get("role") == "user" else "doctor_dashboard"))
+
+        record = record_resp.data
+
+        # Fetch related data
+        vital_signs_resp = supabase.table("vital_signs").select("*").eq("health_record_id", record_id).order("measurement_time").execute()
+        vital_signs = vital_signs_resp.data
+
+        investigations_resp = supabase.table("investigations").select("*").eq("health_record_id", record_id).execute()
+        investigations = investigations_resp.data
+
+        prescriptions_resp = supabase.table("prescriptions").select("*").eq("health_record_id", record_id).execute()
+        prescriptions = prescriptions_resp.data
+
+        billing_resp = supabase.table("billing_records").select("*").eq("health_record_id", record_id).execute()
+        billing = billing_resp.data
+
+        consents_resp = supabase.table("consents").select("*").eq("health_record_id", record_id).execute()
+        consents = consents_resp.data
+
+        # Fetch related user/doctor names
+        patient_id = record["patient_id"]
+        doctor_id = record["doctor_id"]
+        patient_info_resp = supabase.table("users").select("name").eq("id", patient_id).single().execute()
+        doctor_info_resp = supabase.table("users").select("name").eq("id", doctor_id).single().execute()
+        doctor_spec_resp = supabase.table("doctors").select("specialization").eq("id", doctor_id).single().execute()
+
+        patient_info = patient_info_resp.data if patient_info_resp.data else {"name": "Unknown Patient"}
+        doctor_info = doctor_info_resp.data if doctor_info_resp.data else {"name": "Unknown Doctor"}
+        doctor_spec = doctor_spec_resp.data.get("specialization", "N/A") if doctor_spec_resp.data else "N/A"
+
+        return render_template(
+            "view_health_record.html",
+            record=record,
+            vital_signs=vital_signs,
+            investigations=investigations,
+            prescriptions=prescriptions,
+            billing=billing,
+            consents=consents,
+            patient_info=patient_info,
+            doctor_info=doctor_info,
+            doctor_spec=doctor_spec
+        )
+    except Exception as e:
+        print(f"Error fetching health record: {e}")
+        flash("Error loading record. Please try again later.", "danger")
+        return redirect(url_for("user_dashboard" if session.get("role") == "user" else "doctor_dashboard"))
+
+@app.route('/create_health_record/<appointment_id>', methods=["GET", "POST"])
+@login_required
+@doctor_required
+@ensure_doctor_owns_appointment
+def create_health_record(appointment_id):
+    """
+    Create a new health record linked to an appointment.
+    GET: Shows the form.
+    POST: Processes the form and creates the record.
+    """
+    if request.method == 'GET':
+        # Fetch appointment details to pre-populate the form (optional)
+        try:
+            appt_resp = supabase.table("appointments").select("user_id, appointment_time").eq("id", appointment_id).single().execute()
+            appt_data = appt_resp.data
+            patient_resp = supabase.table("users").select("name").eq("id", appt_data["user_id"]).single().execute()
+            patient_name = patient_resp.data["name"]
+            return render_template("create_health_record.html", appointment=appt_data, patient_name=patient_name)
+        except Exception as e:
+            print(f"Error fetching appointment/patient for form: {e}")
+            flash("Error loading appointment details.", "danger")
+            return redirect(url_for("doctor_dashboard"))
+
+    # Process POST request
+    data = request.form # Or request.json if sending JSON
+
+    errors = validate_health_record_data(data)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return redirect(url_for("create_health_record", appointment_id=appointment_id))
+
+    doctor_id = session.get("id") # Doctor ID from session
+    patient_id = data.get("patient_id") # Should be derived from the appointment
+
+    try:
+        # Verify the appointment belongs to this doctor and get patient_id
+        appt_data = supabase.table("appointments").select("user_id").eq("id", appointment_id).eq("doctor_id", doctor_id).single().execute().data
+        if not appt_data:
+             flash("Invalid appointment or access denied.", "danger")
+             return redirect(url_for("doctor_dashboard"))
+        actual_patient_id = appt_data["user_id"]
+
+        # Ensure patient_id from form matches the appointment's user_id (if provided)
+        if patient_id and patient_id != actual_patient_id:
+             flash("Patient ID mismatch with appointment.", "danger")
+             return redirect(url_for("create_health_record", appointment_id=appointment_id))
+
+        # Prepare data for insertion
+        record_data = {
+            "appointment_id": appointment_id,
+            "patient_id": actual_patient_id, # Use the verified ID from the appointment
+            "doctor_id": doctor_id,
+            "chief_complaint": data.get("chief_complaint"),
+            "symptom_description": data.get("symptom_description"),
+            "onset_date": data.get("onset_date") if validate_date_format(data.get("onset_date")) else None,
+            "duration": data.get("duration"),
+            "severity": data.get("severity"),
+            "associated_symptoms": data.getlist("associated_symptoms"), # Handle lists from forms
+            "triggering_factors": data.get("triggering_factors"),
+            "relieving_factors": data.get("relieving_factors"),
+            "past_medical_history": json.loads(data.get("past_medical_history", "{}")), # Expect JSON string
+            "family_medical_history": json.loads(data.get("family_medical_history", "{}")),
+            "allergies": json.loads(data.get("allergies", "{}")),
+            "current_medications": json.loads(data.get("current_medications", "{}")),
+            "clinical_notes": data.get("clinical_notes"),
+            "diagnosis_summary": data.get("diagnosis_summary"),
+            "treatment_plan": data.get("treatment_plan"),
+            "follow_up_instructions": data.get("follow_up_instructions"),
+            "referral_notes": data.get("referral_notes")
+        }
+
+        result = supabase.table("health_records").insert(record_data).execute()
+        new_record_id = result.data[0]["id"]
+
+        flash("Health record created successfully.", "success")
+        return redirect(url_for("view_health_record", record_id=new_record_id))
+
+    except Exception as e:
+        print(f"Error creating health record: {e}")
+        flash("Error creating record. Please try again.", "danger")
+        return redirect(url_for("create_health_record", appointment_id=appointment_id))
+
+@app.route('/add_vital_signs/<record_id>', methods=["POST"])
+@login_required
+@doctor_required
+@ensure_user_is_owner_or_doctor # Reuse the decorator, it checks the doctor's access to the record
+def add_vital_signs(record_id):
+    """Add vital signs to an existing health record."""
+    # Validate record_id format
+    if not validate_uuid_format(record_id):
+        flash("Invalid record ID.", "danger")
+        return redirect(url_for("doctor_dashboard"))
+
+    data = request.form # Or request.json
+    errors = validate_vital_signs_data(data)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    try:
+        # No need to re-verify ownership here as the decorator @ensure_user_is_owner_or_doctor
+        # already did this check for the doctor when the route was accessed.
+        # The decorator ensures the doctor_id matches the record's doctor_id.
+
+        vital_data = {
+            "health_record_id": record_id,
+            "systolic_bp": int(data.get("systolic_bp")) if data.get("systolic_bp") else None,
+            "diastolic_bp": int(data.get("diastolic_bp")) if data.get("diastolic_bp") else None,
+            "pulse_rate": int(data.get("pulse_rate")) if data.get("pulse_rate") else None,
+            "temperature": float(data.get("temperature")) if data.get("temperature") else None,
+            "respiratory_rate": int(data.get("respiratory_rate")) if data.get("respiratory_rate") else None,
+            "oxygen_saturation": float(data.get("oxygen_saturation")) if data.get("oxygen_saturation") else None,
+            "weight_kg": float(data.get("weight_kg")) if data.get("weight_kg") else None,
+            "height_cm": float(data.get("height_cm")) if data.get("height_cm") else None,
+            "notes": data.get("notes")
+        }
+        # Calculate BMI if weight and height are provided and BMI is not already calculated client-side
+        if vital_data["weight_kg"] and vital_data["height_cm"] and vital_data["height_cm"] > 0:
+            height_m = vital_data["height_cm"] / 100.0
+            # Round to 2 decimal places
+            vital_data["bmi"] = round(vital_data["weight_kg"] / (height_m ** 2), 2)
+        else:
+            vital_data["bmi"] = None # Explicitly set to null if calculation is not possible
+
+        supabase.table("vital_signs").insert(vital_data).execute()
+        flash("Vital signs added successfully.", "success")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    except Exception as e:
+        print(f"Error adding vital signs: {e}")
+        flash("Error adding vital signs. Please try again.", "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+@app.route('/add_prescription/<record_id>', methods=["POST"])
+@login_required
+@doctor_required
+@ensure_user_is_owner_or_doctor
+def add_prescription(record_id):
+    """Add a prescription to an existing health record."""
+    if not validate_uuid_format(record_id):
+        flash("Invalid record ID.", "danger")
+        return redirect(url_for("doctor_dashboard"))
+
+    data = request.form # Or request.json
+    errors = validate_prescription_data(data)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    try:
+        # Ownership check is handled by decorator
+        prescription_data = {
+            "health_record_id": record_id,
+            "medication_name": data.get("medication_name"),
+            "dosage": data.get("dosage"),
+            "route": data.get("route"),
+            "frequency": data.get("frequency"),
+            "duration": data.get("duration"),
+            "instructions": data.get("instructions"),
+            "quantity": int(data.get("quantity")) if data.get("quantity") else None,
+            "refills": int(data.get("refills")) if data.get("refills") else 0,
+            "prescribed_by": session.get("id") # Doctor ID from session
+        }
+
+        supabase.table("prescriptions").insert(prescription_data).execute()
+        flash("Prescription added successfully.", "success")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    except Exception as e:
+        print(f"Error adding prescription: {e}")
+        flash("Error adding prescription. Please try again.", "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+@app.route('/add_investigation/<record_id>', methods=["POST"])
+@login_required
+@doctor_required
+@ensure_user_is_owner_or_doctor
+def add_investigation(record_id):
+    """Add an investigation request to an existing health record."""
+    if not validate_uuid_format(record_id):
+        flash("Invalid record ID.", "danger")
+        return redirect(url_for("doctor_dashboard"))
+
+    data = request.form # Or request.json
+    errors = validate_investigation_data(data)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    try:
+        # Ownership check is handled by decorator
+        investigation_data = {
+            "health_record_id": record_id,
+            "test_name": data.get("test_name"),
+            "test_type": data.get("test_type"),
+            "date_ordered": data.get("date_ordered") if validate_date_format(data.get("date_ordered")) else None,
+            "results": data.get("results"),
+            "normal_range": data.get("normal_range"),
+            "doctor_remarks": data.get("doctor_remarks"),
+            "status": data.get("status", "Ordered"),
+            "priority": data.get("priority", "Routine")
+        }
+
+        supabase.table("investigations").insert(investigation_data).execute()
+        flash("Investigation added successfully.", "success")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    except Exception as e:
+        print(f"Error adding investigation: {e}")
+        flash("Error adding investigation. Please try again.", "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+# --- Optional: Routes for updating billing/consents if needed by doctors ---
+# These follow the same pattern as add_vital_signs/add_prescription etc.
+@app.route('/add_billing/<record_id>', methods=["POST"])
+@login_required
+@doctor_required
+@ensure_user_is_owner_or_doctor
+def add_billing(record_id):
+    """Add/update billing information for a health record."""
+    if not validate_uuid_format(record_id):
+        flash("Invalid record ID.", "danger")
+        return redirect(url_for("doctor_dashboard"))
+
+    data = request.form # Or request.json
+    errors = validate_billing_data(data)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    try:
+        # Check if a billing record already exists for this health_record_id
+        existing_billing = supabase.table("billing_records").select("*").eq("health_record_id", record_id).execute().data
+        if existing_billing:
+             # If exists, update the existing record
+             billing_data = {
+                 "consultation_fee": float(data.get("consultation_fee", 0)),
+                 "test_fees": float(data.get("test_fees", 0)),
+                 "medication_cost": float(data.get("medication_cost", 0)),
+                 "total_amount": float(data.get("total_amount", 0)),
+                 "payment_method": data.get("payment_method"),
+                 "payment_status": data.get("payment_status", "Pending"),
+                 "insurance_details": json.loads(data.get("insurance_details", "{}"))
+             }
+             supabase.table("billing_records").update(billing_data).eq("health_record_id", record_id).execute()
+             flash("Billing information updated successfully.", "success")
+        else:
+             # If not exists, create a new record
+             billing_data = {
+                 "health_record_id": record_id,
+                 "consultation_fee": float(data.get("consultation_fee", 0)),
+                 "test_fees": float(data.get("test_fees", 0)),
+                 "medication_cost": float(data.get("medication_cost", 0)),
+                 "total_amount": float(data.get("total_amount", 0)),
+                 "payment_method": data.get("payment_method"),
+                 "payment_status": data.get("payment_status", "Pending"),
+                 "insurance_details": json.loads(data.get("insurance_details", "{}"))
+             }
+             supabase.table("billing_records").insert(billing_data).execute()
+             flash("Billing information added successfully.", "success")
+
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    except Exception as e:
+        print(f"Error adding/updating billing: {e}")
+        flash("Error processing billing information. Please try again.", "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+@app.route('/add_consent/<record_id>', methods=["POST"])
+@login_required
+@doctor_required # Assuming only doctors can add specific consent records during consultation
+@ensure_user_is_owner_or_doctor
+def add_consent(record_id):
+    """Add a consent record for a health record."""
+    if not validate_uuid_format(record_id):
+        flash("Invalid record ID.", "danger")
+        return redirect(url_for("doctor_dashboard"))
+
+    data = request.form # Or request.json
+    errors = validate_consent_data(data)
+    if errors:
+        for error in errors:
+            flash(error, "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    try:
+        # Ownership check is handled by decorator
+        consent_data = {
+            "health_record_id": record_id,
+            "consent_type": data.get("consent_type"),
+            "consent_given": data.get("consent_given") == 'true', # Convert string to boolean
+            "consent_date": data.get("consent_date") if validate_date_format(data.get("consent_date")) else date.today().isoformat(),
+            "signature_path": data.get("signature_path") # Optional, path to signature file
+        }
+
+        supabase.table("consents").insert(consent_data).execute()
+        flash("Consent record added successfully.", "success")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
+    except Exception as e:
+        print(f"Error adding consent: {e}")
+        flash("Error processing consent. Please try again.", "danger")
+        return redirect(url_for("view_health_record", record_id=record_id))
+
 
 # ============================================================
 # Routes - User Profile & Account Management

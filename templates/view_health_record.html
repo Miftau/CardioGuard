@@ -1,0 +1,226 @@
+<!-- templates/view_health_record.html -->
+{% extends "base.html" %}
+
+{% block title %}Health Record Details{% endblock %}
+
+{% block sidebar %}
+<!-- Include the sidebar for logged-in users -->
+{% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+{% include 'sidebar.html' %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 max-w-7xl">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                    <span class="bg-gradient-to-r from-purple-500 to-purple-700 p-2 rounded-lg text-white">📋</span>
+                    Health Record Details
+                </h1>
+                <p class="text-gray-600 mt-1">Record ID: {{ record.id[:15] }}</p>
+            </div>
+            <a href="{{ url_for('user_dashboard' if session.role == 'user' else 'doctor_dashboard') }}"
+                class="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-5 py-2.5 rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-md hover:shadow-lg transition duration-300 text-center min-w-[120px]">
+                Back to Dashboard
+            </a>
+        </div>
+
+        <!-- Patient Summary Panel -->
+        <div class="mb-6 p-4 border rounded bg-gray-50">
+            <h3 class="text-xl font-semibold mb-2">Patient Summary</h3>
+            <p><strong>Patient:</strong> {{ patient_info.name }}</p>
+            <p><strong>Doctor:</strong> {{ doctor_info.name }} ({{ doctor_spec }})</p>
+            <p><strong>Appointment:</strong> {{ record.appointment_id or 'N/A' }}</p>
+            <p><strong>Date:</strong> {{ record.created_at[:16] if record.created_at else 'N/A' }}</p>
+</section>
+
+<!-- Chief Complaint & History (Section C & D) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Complaint & History</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <p><strong>Chief Complaint:</strong> {{ record.chief_complaint or 'N/A' }}</p>
+            <p><strong>Symptoms:</strong> {{ record.symptom_description or 'N/A' }}</p>
+            <p><strong>Onset:</strong> {{ record.onset_date or 'N/A' }}</p>
+            <p><strong>Duration:</strong> {{ record.duration or 'N/A' }}</p>
+            <p><strong>Severity:</strong> {{ record.severity or 'N/A' }}</p>
+            <p><strong>Associated Symptoms:</strong> {{ record.associated_symptoms | join(', ') or 'N/A' }}</p>
+        </div>
+        <div>
+            <p><strong>Past Medical History:</strong></p>
+            <pre
+                class="text-sm bg-gray-100 p-2 rounded">{{ record.past_medical_history | tojson(indent=2) or '{}' }}</pre>
+            <p><strong>Family History:</strong></p>
+            <pre
+                class="text-sm bg-gray-100 p-2 rounded">{{ record.family_medical_history | tojson(indent=2) or '{}' }}</pre>
+            <p><strong>Allergies:</strong></p>
+            <pre class="text-sm bg-gray-100 p-2 rounded">{{ record.allergies | tojson(indent=2) or '{}' }}</pre>
+            <p><strong>Current Meds:</strong></p>
+            <pre
+                class="text-sm bg-gray-100 p-2 rounded">{{ record.current_medications | tojson(indent=2) or '{}' }}</pre>
+        </div>
+    </div>
+</section>
+
+<!-- Vital Signs (Section I) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Vital Signs</h3>
+    {% if vital_signs %}
+    <div class="overflow-x-auto">
+        <table class="w-full border-collapse">
+            <thead>
+                <tr class="bg-gradient-to-r from-gray-50 to-gray-100 text-gray-700 text-left">
+                    <th class="py-2 px-3">Date/Time</th>
+                    <th class="py-2 px-3">BP (S/D)</th>
+                    <th class="py-2 px-3">Pulse</th>
+                    <th class="py-2 px-3">Temp (°C)</th>
+                    <th class="py-2 px-3">Resp Rate</th>
+                    <th class="py-2 px-3">O2 Sat (%)</th>
+                    <th class="py-2 px-3">Weight (kg)</th>
+                    <th class="py-2 px-3">BMI</th>
+                    <th class="py-2 px-3">Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vs in vital_signs %}
+                <tr class="border-b border-gray-200">
+                    <td class="py-2 px-3">{{ vs.measurement_time[:16] if vs.measurement_time else 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.systolic_bp or 'N/A' }} / {{ vs.diastolic_bp or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.pulse_rate or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.temperature or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.respiratory_rate or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.oxygen_saturation or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.weight_kg or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.bmi or 'N/A' }}</td>
+                    <td class="py-2 px-3">{{ vs.notes or 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-600">No vital signs recorded.</p>
+    {% endif %}
+</section>
+
+<!-- Clinical Notes (Section G - Partly) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Clinical Notes & Assessment</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <p><strong>Doctor's Notes:</strong></p>
+            <pre class="text-sm bg-gray-100 p-2 rounded">{{ record.clinical_notes or 'N/A' }}</pre>
+            <p><strong>Diagnosis Summary:</strong></p>
+            <pre class="text-sm bg-gray-100 p-2 rounded">{{ record.diagnosis_summary or 'N/A' }}</pre>
+        </div>
+        <div>
+            <p><strong>Treatment Plan:</strong></p>
+            <pre class="text-sm bg-gray-100 p-2 rounded">{{ record.treatment_plan or 'N/A' }}</pre>
+            <p><strong>Follow-up Instructions:</strong></p>
+            <pre class="text-sm bg-gray-100 p-2 rounded">{{ record.follow_up_instructions or 'N/A' }}</pre>
+            <p><strong>Referral Notes:</strong></p>
+            <pre class="text-sm bg-gray-100 p-2 rounded">{{ record.referral_notes or 'N/A' }}</pre>
+        </div>
+    </div>
+</section>
+
+<!-- Prescriptions (Section F) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Prescriptions</h3>
+    {% if prescriptions %}
+    <ul class="space-y-2">
+        {% for rx in prescriptions %}
+        <li class="border-b pb-2 mb-2">
+            <strong>{{ rx.medication_name }}</strong> - {{ rx.dosage or 'N/A' }} {{ rx.route or 'N/A' }} {{ rx.frequency
+            or 'N/A' }} for {{ rx.duration or 'N/A' }}
+            {% if rx.quantity %}<br /><em>Quantity:</em> {{ rx.quantity }}{% endif %}
+            {% if rx.refills %}<br /><em>Refills:</em> {{ rx.refills }}{% endif %}
+            {% if rx.instructions %}<br /><em>Instructions:</em> {{ rx.instructions }}{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-gray-600">No prescriptions.</p>
+    {% endif %}
+</section>
+
+<!-- Investigations (Section H) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Investigations</h3>
+    {% if investigations %}
+    <ul class="space-y-2">
+        {% for inv in investigations %}
+        <li class="border-b pb-2 mb-2">
+            <strong>{{ inv.test_name }}</strong> ({{ inv.test_type or 'N/A' }) - <span class="font-medium">{{ inv.status
+                }}</span> - <span class="text-sm">{{ inv.priority }}</span>
+            {% if inv.date_ordered %}<br /><em>Ordered:</em> {{ inv.date_ordered }}{% endif %}
+            {% if inv.date_completed %}<br /><em>Completed:</em> {{ inv.date_completed }}{% endif %}
+            {% if inv.results %}<br /><em>Results:</em> {{ inv.results }}{% endif %}
+            {% if inv.doctor_remarks %}<br /><em>Remarks:</em> {{ inv.doctor_remarks }}{% endif %}
+            {% if inv.report_file_path %}<br /><em>Report:</em> <a href="{{ inv.report_file_path }}" target="_blank"
+                class="text-blue-500 hover:underline">View File</a>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-gray-600">No investigations ordered.</p>
+    {% endif %}
+</section>
+
+<!-- Billing (Section J) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Billing</h3>
+    {% if billing %}
+    {% for bill in billing %} <!-- Assuming one billing record per health record -->
+    <div>
+        <p><strong>Consultation Fee:</strong> ${{ "%.2f"|format(bill.consultation_fee or 0) }}</p>
+        <p><strong>Test Fees:</strong> ${{ "%.2f"|format(bill.test_fees or 0) }}</p>
+        <p><strong>Medication Cost:</strong> ${{ "%.2f"|format(bill.medication_cost or 0) }}</p>
+        <p class="font-bold"><strong>Total Amount:</strong> ${{ "%.2f"|format(bill.total_amount or 0) }}</p>
+        <p><strong>Payment Status:</strong> <span class="px-2.5 py-1 rounded-full text-xs font-medium
+                    {% if bill.payment_status == 'Paid' %}bg-green-100 text-green-800
+                    {% elif bill.payment_status == 'Pending' %}bg-yellow-100 text-yellow-800
+                    {% elif bill.payment_status == 'Partially Paid' %}bg-orange-100 text-orange-800
+                    {% else %}bg-red-100 text-red-800{% endif %}">{{ bill.payment_status }}</span></p>
+        <p><strong>Method:</strong> {{ bill.payment_method or 'N/A' }}</p>
+        {% if bill.insurance_details %}
+        <p><strong>Insurance:</strong></p>
+        <pre class="text-sm bg-gray-100 p-2 rounded">{{ bill.insurance_details | tojson(indent=2) or '{}' }}</pre>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="text-gray-600">No billing information available.</p>
+    {% endif %}
+</section>
+
+<!-- Consents (Section K) -->
+<section class="mb-6 p-4 border rounded">
+    <h3 class="text-xl font-semibold mb-2">Consents</h3>
+    {% if consents %}
+    <ul class="space-y-2">
+        {% for consent in consents %}
+        <li>
+            <strong>{{ consent.consent_type }}:</strong>
+            <span class="px-2.5 py-1 rounded-full text-xs font-medium
+                    {% if consent.consent_given %}bg-green-100 text-green-800
+                    {% else %}bg-red-100 text-red-800{% endif %}">
+                {{ 'Given' if consent.consent_given else 'Not Given' }}
+            </span>
+            {% if consent.consent_date %} on {{ consent.consent_date }}{% endif %}
+            {% if consent.signature_path %}<br /><em>Signature:</em> <a href="{{ consent.signature_path }}"
+                target="_blank" class="text-blue-500 hover:underline">View File</a>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-gray-600">No consent records.</p>
+    {% endif %}
+</section>
+
+</div>
+</section>
+{% endblock %}

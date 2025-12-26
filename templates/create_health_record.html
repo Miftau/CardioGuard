@@ -1,0 +1,225 @@
+<!-- templates/create_health_record.html -->
+{% extends "base.html" %}
+
+{% block title %}Create Health Record{% endblock %}
+
+{% block sidebar %}
+<!-- Include the sidebar for logged-in users -->
+{% if session.get('user_id') or session.get('doctor_id') or session.get('admin_id') %}
+{% include 'sidebar.html' %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="py-8 bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 max-w-7xl">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                    <span class="bg-gradient-to-r from-red-500 to-red-700 p-2 rounded-lg text-white">📝</span>
+                    Create New Health Record
+                </h1>
+                <p class="text-gray-600 mt-1">Record details for appointment: {{ appointment.appointment_time[:16] }}
+                    with {{ patient_name }}</p>
+            </div>
+            <a href="{{ url_for('doctor_health_records') }}"
+                class="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-5 py-2.5 rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-md hover:shadow-lg transition duration-300 text-center min-w-[120px]">
+                Back to Consultations
+            </a>
+        </div>
+
+        <!-- Form -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <form method="POST" action="{{ url_for('create_health_record', appointment_id=appointment.id) }}">
+                <!-- Section C: Presenting Complaint & History -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">C. Presenting Complaint & History
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="chief_complaint">
+                                Chief Complaint (in patient’s words)
+                            </label>
+                            <input type="text" id="chief_complaint" name="chief_complaint"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="e.g., Chest pain">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="symptom_description">
+                                Symptom Description
+                            </label>
+                            <textarea id="symptom_description" name="symptom_description"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="Describe symptoms..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="onset_date">
+                                Onset Date
+                            </label>
+                            <input type="date" id="onset_date" name="onset_date"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="duration">
+                                Duration
+                            </label>
+                            <input type="text" id="duration" name="duration"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="e.g., 3 days">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="severity">
+                                Severity
+                            </label>
+                            <select id="severity" name="severity"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                <option value="">Select...</option>
+                                <option value="Mild">Mild</option>
+                                <option value="Moderate">Moderate</option>
+                                <option value="Severe">Severe</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="associated_symptoms">
+                                Associated Symptoms (comma-separated)
+                            </label>
+                            <input type="text" id="associated_symptoms" name="associated_symptoms"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="e.g., fever, nausea">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="triggering_factors">
+                                Triggering Factors
+                            </label>
+                            <input type="text" id="triggering_factors" name="triggering_factors"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="e.g., exercise, stress">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="relieving_factors">
+                                Relieving Factors
+                            </label>
+                            <input type="text" id="relieving_factors" name="relieving_factors"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="e.g., rest, medication">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section D: Past Medical History -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">D. Past Medical History</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="past_medical_history">
+                                Previous Illnesses / Chronic Conditions (JSON)
+                            </label>
+                            <textarea id="past_medical_history" name="past_medical_history"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder='{"chronic_conditions": ["Hypertension"], "previous_illnesses": ["Malaria"], "surgical_history": []}'
+                                rows="4"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="family_medical_history">
+                                Family Medical History (JSON)
+                            </label>
+                            <textarea id="family_medical_history" name="family_medical_history"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder='{"diabetes": "Father", "heart_disease": "Mother"}' rows="4"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section E: Allergies & Sensitivities -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">E. Allergies & Sensitivities</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="allergies">
+                                Allergies (JSON)
+                            </label>
+                            <textarea id="allergies" name="allergies"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder='{"drug_allergies": [{"name": "Penicillin", "reaction": "Rash"}], "food_allergies": [{"name": "Peanuts", "reaction": "Anaphylaxis"}]}'
+                                rows="4"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section F: Medications -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">F. Medications</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="current_medications">
+                                Current Medications (JSON)
+                            </label>
+                            <textarea id="current_medications" name="current_medications"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder='{"medications": [{"name": "Paracetamol", "dosage": "500mg", "frequency": "Twice daily", "duration": "5 days"}]}'
+                                rows="4"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section G: Clinical Records -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">G. Clinical Records</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="clinical_notes">
+                                Doctor's Notes (SOAP format recommended)
+                            </label>
+                            <textarea id="clinical_notes" name="clinical_notes"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="S: (Subjective) Patient states... O: (Objective) Physical exam findings... A: (Assessment) Provisional diagnosis... P: (Plan) Treatment plan..."
+                                rows="6"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="diagnosis_summary">
+                                Diagnosis Summary
+                            </label>
+                            <input type="text" id="diagnosis_summary" name="diagnosis_summary"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="e.g., Acute Bronchitis">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="treatment_plan">
+                                Treatment Plan
+                            </label>
+                            <textarea id="treatment_plan" name="treatment_plan"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="Describe treatment..."></textarea>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="follow_up_instructions">
+                                Follow-up Instructions
+                            </label>
+                            <textarea id="follow_up_instructions" name="follow_up_instructions"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="Instructions for patient..."></textarea>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-gray-700 text-sm font-bold mb-2" for="referral_notes">
+                                Referral Notes
+                            </label>
+                            <textarea id="referral_notes" name="referral_notes"
+                                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                placeholder="Notes if referring to another specialist..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex items-center justify-between">
+                    <button type="submit"
+                        class="bg-gradient-to-r from-red-500 to-red-700 text-white px-6 py-3 rounded-xl hover:from-teal-600 hover:to-teal-700 shadow-md hover:shadow-lg transition duration-300">
+                        Create Health Record
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}
