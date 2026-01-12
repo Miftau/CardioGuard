@@ -53,7 +53,7 @@ import shap
 import joblib
 from flask_sse import sse
 from jinja2 import Environment
-from datetime import datetime
+from flask_limiter.util import get_remote_address
 
 
 from functools import wraps # For login_required decorator
@@ -264,6 +264,15 @@ def load_models():
     clinical_model, clinical_scaler, CLINICAL_FEATURE_COLUMNS,
     lifestyle_model, lifestyle_scaler, LIFESTYLE_FEATURE_COLUMNS
 ) = load_models()
+
+def wants_json_response():
+    """Detect if client prefers JSON over HTML."""
+    best = request.accept_mimetypes.best_match(['application/json', 'text/html'])
+    return (
+        best == 'application/json' and
+        request.accept_mimetypes[best] > request.accept_mimetypes['text/html']
+    )
+
 # Prediction helper (clinical & lifestyle) 
 def prepare_and_predict(df_raw: pd.DataFrame, model_type: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if model_type not in ("clinical", "lifestyle"):
@@ -1381,11 +1390,10 @@ def create_notification(user_id, notification_type, message, channel="in_app", i
         return False
 
 
-
-
 # ============================================================
 # Routes - Authentication
 # ============================================================
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -1394,16 +1402,22 @@ def register():
         password = request.form.get("password", "")
         role = request.form.get("role", "user").strip().lower()  # expected: 'user', 'doctor' (or admin via admin UI)
         if not name or not email or not password:
+            if wants_json_response():
+                return jsonify({"error": "Please fill in all required fields."}), 400
             flash("Please fill in all required fields.", "danger")
             return redirect(url_for("register"))
         # Check if user exists
         try:
             existing = supabase.table("users").select("id, email").eq("email", email).execute()
             if existing and existing.data:
+                if wants_json_response():
+                    return jsonify({"error": "Email already registered. Try logging in."}), 409
                 flash("Email already registered. Try logging in.", "warning")
                 return redirect(url_for("login"))
         except Exception as e:
             print("Supabase check error:", e)
+            if wants_json_response():
+                return jsonify({"error": "Registration currently unavailable. Try again later."}), 500
             flash("Registration currently unavailable. Try again later.", "danger")
             return redirect(url_for("register"))
         # Hash password with bcrypt
@@ -1420,6 +1434,8 @@ def register():
             new_user = res.data[0] if res and res.data else None
         except Exception as e:
             print("Supabase insert user error:", e)
+            if wants_json_response():
+                return jsonify({"error": "Failed to create account. Try again later."}), 500
             flash("Failed to create account. Try again later.", "danger")
             return redirect(url_for("register"))
         # If doctor, create doctor profile row
@@ -1435,16 +1451,24 @@ def register():
                     }).execute()
         except Exception as e:
             print("Warning: failed to create doctor profile:", e)
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Account created successfully. Please log in."}), 201
         flash("Account created successfully. Please log in.", "success")
         return redirect(url_for("login"))
     # GET
+    if wants_json_response():
+        return jsonify({"error": "Use POST to register"}), 405
     return render_template("register.html")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         if not email or not password:
+            if wants_json_response():
+                return jsonify({"error": "Please provide both email and password."}), 400
             flash("Please provide both email and password.", "warning")
             return redirect(url_for("login"))
         # ---- STEP 1: Check Users Table ----
@@ -1452,8 +1476,11 @@ def login():
             user_resp = supabase.table("users").select("*").eq("email", email).limit(1).execute()
         except Exception as e:
             print("Supabase user query error:", e)
+            if wants_json_response():
+                return jsonify({"error": "Login temporarily unavailable. Please try again later."}), 500
             flash("Login temporarily unavailable. Please try again later.", "danger")
             return redirect(url_for("login"))
+
         if user_resp and user_resp.data:
             user = user_resp.data[0]
             stored_hash = user.get("password_hash")
@@ -1475,18 +1502,45 @@ def login():
                         session["role"] = role
                         # --- STEP 1B: Redirect Based on Role ---
                         if role == "admin":
+                            if wants_json_response():
+                                return jsonify({
+                                    "status": "success",
+                                    "message": "Welcome back, Admin!",
+                                    "user_id": user.get("id"),
+                                    "role": "admin",
+                                    "name": user.get("name")
+                                }), 200
                             flash("Welcome back, Admin!", "success")
                             return redirect(url_for("admin_dashboard"))
                         elif role == "doctor":
+                            if wants_json_response():
+                                return jsonify({
+                                    "status": "success",
+                                    "message": "Welcome Doctor!",
+                                    "user_id": user.get("id"),
+                                    "role": "doctor",
+                                    "name": user.get("name")
+                                }), 200
                             flash("Welcome Doctor!", "success")
                             return redirect(url_for("doctor_dashboard"))
                         else:
+                            if wants_json_response():
+                                return jsonify({
+                                    "status": "success",
+                                    "message": "Welcome back!",
+                                    "user_id": user.get("id"),
+                                    "role": "user",
+                                    "name": user.get("name")
+                                }), 200
                             flash("Welcome back!", "success")
                             return redirect(url_for("user_dashboard"))
                 except ValueError as e:
                     print("Password hash error:", e)
+                    if wants_json_response():
+                        return jsonify({"error": "Error verifying credentials. Contact support."}), 500
                     flash("Error verifying credentials. Contact support.", "danger")
                     return redirect(url_for("login"))
+
         # ---- STEP 2: Check Admins Table (Fallback) ----
         try:
             admin_resp = supabase.table("admins").select("*").eq("email", email).limit(1).execute()
@@ -1498,15 +1552,29 @@ def login():
                     session["user_id"] = admin.get("id")
                     session["role"] = "admin"
                     session["user_name"] = admin.get("name")
+                    if wants_json_response():
+                        return jsonify({
+                            "status": "success",
+                            "message": "Welcome back, Admin!",
+                            "user_id": admin.get("id"),
+                            "role": "admin",
+                            "name": admin.get("name")
+                        }), 200
                     flash("Welcome back, Admin!", "success")
                     return redirect(url_for("admin_dashboard"))
         except Exception as e:
             print("Supabase admin lookup error:", e)
+
+        if wants_json_response():
+            return jsonify({"error": "Invalid email or password."}), 401
         flash("Invalid email or password.", "danger")
         return redirect(url_for("login"))
+    
+    if wants_json_response():
+        return jsonify({"error": "Use POST to login"}), 405
     return render_template("login.html")
-    # GET
-    return render_template("login.html")
+
+
 @app.route("/logout")
 def logout():
     supabase.auth.sign_out() # Sign out from Supabase
@@ -1514,25 +1582,38 @@ def logout():
     session.pop("role", None)
     session.pop("user_name", None)
     session.pop("user_email", None) # Clear email
+    if wants_json_response():
+        return jsonify({"status": "logged out"}), 200
     flash("Logged out successfully.")
     return redirect(url_for("login"))
+
+
 # --- Social Login Routes ---
 @app.route("/auth/<provider>")
 def social_login(provider):
     providers = {"google", "facebook", "github"}
     if provider not in providers:
+        if wants_json_response():
+            return jsonify({"error": "Unsupported provider"}), 400
         flash("Unsupported provider", "danger")
         return redirect(url_for("login"))
     redirect_url = url_for("auth_callback", provider=provider, _external=True)
     # Supabase OAuth URL
     auth_url = f"{SUPABASE_URL}/auth/v1/authorize?provider={provider}&redirect_to={redirect_url}"
+    if wants_json_response():
+        return jsonify({"auth_url": auth_url}), 200
     return redirect(auth_url)
+
+
 @app.route("/auth/callback/<provider>")
 def auth_callback(provider):
     code = request.args.get("code")
     if not code:
+        if wants_json_response():
+            return jsonify({"error": "Authentication failed"}), 400
         flash("Authentication failed", "danger")
         return redirect(url_for("login"))
+
     # Exchange code for session
     res = requests.post(
         f"{SUPABASE_URL}/auth/v1/token?grant_type=authorization_code",
@@ -1541,9 +1622,22 @@ def auth_callback(provider):
     )
     data = res.json()
     if "access_token" not in data:
+        if wants_json_response():
+            return jsonify({"error": "Login failed"}), 400
         flash("Login failed", "danger")
         return redirect(url_for("login"))
+
     handle_supabase_auth_session(data) # Process session and set Flask session
+    if wants_json_response():
+        role = session["role"]
+        return jsonify({
+            "status": "success",
+            "message": "Signed in successfully!",
+            "user_id": session["user_id"],
+            "role": role,
+            "name": session["user_name"]
+        }), 200
+    
     flash("Signed in successfully!", "success")
     role = session["role"]
     if role == "admin":
@@ -1552,23 +1646,34 @@ def auth_callback(provider):
         return redirect(url_for("doctor_dashboard"))
     else:
         return redirect(url_for("user_dashboard"))
+
+
 # ============================================================
 # Routes - Main UI Pages
 # ============================================================
+
 @app.route("/")
 def index():
+    if wants_json_response():
+        return jsonify({"message": "CardioGuard API is running", "version": "1.0"}), 200
     return render_template("index.html")
 
 @app.route("/about")
 def about():
+    if wants_json_response():
+        return jsonify({"page": "about", "content": "CardioGuard provides predictive health analytics for cardiovascular conditions."}), 200
     return render_template("about.html")
 
 @app.route("/resources")
 def resources():
+    if wants_json_response():
+        return jsonify({"page": "resources", "content": "Educational materials and health resources for cardiovascular care."}), 200
     return render_template("resources.html")
 
 @app.route('/pitch')
 def pitch():
+    if wants_json_response():
+        return jsonify({"page": "pitch", "content": "CardioGuard business pitch and investment information."}), 200
     return render_template('pitch.html')
 
 @app.route("/contact", methods=["GET", "POST"])
@@ -1579,6 +1684,8 @@ def contact():
         subject = request.form.get("subject")
         message = request.form.get("message")
         if not all([name, email, message]):
+            if wants_json_response():
+                return jsonify({"error": "Please fill all fields."}), 400
             flash("Please fill all fields.", "danger")
             return redirect(url_for("contact"))
         try:
@@ -1590,12 +1697,23 @@ Email: {email}
 Message: {message}"""
             )
             mail.send(msg)
+            if wants_json_response():
+                return jsonify({"status": "success", "message": "✅ Message sent successfully!"}), 200
             flash("✅ Message sent successfully!", "success")
         except Exception as e:
             print("Mail send error:", e)
+            if wants_json_response():
+                return jsonify({"error": "❌ Failed to send message."}), 500
             flash("❌ Failed to send message.", "danger")
         return redirect(url_for("contact"))
+    
+    if wants_json_response():
+        return jsonify({
+            "page": "contact",
+            "fields": ["name", "email", "subject", "message"]
+        }), 200
     return render_template("contact.html")
+
 @app.route("/form")
 def form():
     # Check access for non-logged-in users only
@@ -1604,16 +1722,26 @@ def form():
             last_time = datetime.fromisoformat(last_form_time)
             now = datetime.now()
             if now - last_time < timedelta(days=30): # 30 days
+                if wants_json_response():
+                    return jsonify({"error": "You can only access the form once per month as a non-logged-in user."}), 429
                 flash("You can only access the form once per month as a non-logged-in user.", "warning")
                 return redirect(url_for('index'))
+    
+    if wants_json_response():
+        return jsonify({
+            "clinical_columns": BASE_COLUMNS_CLINICAL,
+            "lifestyle_columns": BASE_COLUMNS_LIFESTYLE
+        }), 200
     return render_template(
         "form.html",
         BASE_COLUMNS_CLINICAL=BASE_COLUMNS_CLINICAL,
         BASE_COLUMNS_LIFESTYLE=BASE_COLUMNS_LIFESTYLE
     )
+    
 # ============================================================
 # Routes - Prediction & AI
 # ============================================================
+
 @app.route("/predict", methods=["POST"])
 #@check_subscription_access # Apply access control
 def predict():
@@ -1654,7 +1782,8 @@ def predict():
             except Exception as e:
                 print(f"Error saving record for user {user_id}: {e}")
                 # Flash a warning but allow results to be shown
-                flash("⚠️ Warning: Result not saved to your history.", "warning")
+                if not wants_json_response():
+                    flash("⚠️ Warning: Result not saved to your history.", "warning")
         else:
             # Non-logged-in user: update session time
             session['last_form_time'] = datetime.now().isoformat()
@@ -1694,23 +1823,45 @@ def predict():
             oldpeak=single.get("oldpeak"),
             st_slope=single.get("slope")
         )
-        return render_template(
-            "result.html",
-            result=readable,
-            prob=prob,
-            risk=risk,
-            likely_condition=likely_condition,
-            suggestions=suggestions,
-            tables=[results.to_html(classes="table table-striped", index=False)],
-            download_link=download_link,
-            model_type=model_type,
-            shap_explanation=shap_explanation # Pass SHAP explanation to template
-        )
+        
+        # Build response data
+        response_data = {
+            "result": readable,
+            "prob": prob,
+            "risk": risk,
+            "likely_condition": likely_condition,
+            "suggestions": suggestions,
+            "download_link": download_link,
+            "model_type": model_type,
+            "shap_explanation": shap_explanation,
+            "raw_input": user_data if not uploaded_file else None,
+            "csv_download_url": download_link
+        }
+        
+        if wants_json_response():
+            return jsonify(response_data), 200
+        else:
+            return render_template(
+                "result.html",
+                result=readable,
+                prob=prob,
+                risk=risk,
+                likely_condition=likely_condition,
+                suggestions=suggestions,
+                tables=[results.to_html(classes="table table-striped", index=False)],
+                download_link=download_link,
+                model_type=model_type,
+                shap_explanation=shap_explanation # Pass SHAP explanation to template
+            )
     except Exception as e:
         print("Prediction error:", e)
-        flash(f"Error processing prediction: {str(e)}", "danger")
+        error_msg = f"Error processing prediction: {str(e)}"
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("form"))
-# AI chat endpoint (JSON API)
+
+# AI chat endpoint (JSON API) - ALREADY JSON, no changes needed
 @app.route("/consult", methods=["POST"])
 def consult():
     """
@@ -1756,21 +1907,29 @@ def consult():
     except Exception as e:
         print("Warning: save chat failed:", e)
     return jsonify({"reply": ai_reply, "saved": bool(supabase)}), 200
+
 # ============================================================
 # Routes - Notifications & Messaging
 # ============================================================
+
 @app.route("/api/notifications/count")
 def get_notification_count():
     user_id = session.get("user_id")
     if not user_id:
+        if wants_json_response():
+            return jsonify({"count": 0, "notifications": []})
         return jsonify({"count": 0, "notifications": []})
     try:
         # Fetch unread notifications
         res = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(5).execute()
         notifications = res.data if res.data else []
+        if wants_json_response():
+            return jsonify({"count": len(notifications), "notifications": notifications})
         return jsonify({"count": len(notifications), "notifications": notifications})
     except Exception as e:
         print(f"Error fetching notifications: {e}")
+        if wants_json_response():
+            return jsonify({"count": 0, "notifications": []})
         return jsonify({"count": 0, "notifications": []})
 
 @app.route('/notifications/stream')
@@ -1779,6 +1938,8 @@ def notifications_stream():
     user_id = session.get("user_id")
     if not user_id:
         # Return an error or redirect if not logged in
+        if wants_json_response():
+            return jsonify({"error": "Unauthorized"}), 401
         return jsonify({"error": "Unauthorized"}), 401
 
     def event_stream():
@@ -1814,22 +1975,25 @@ def notifications_stream():
 
     return Response(event_stream(), mimetype="text/event-stream")
 
-
-
 @app.route("/api/messages/unread_count")
 def get_unread_message_count():
     user_id = session.get("id")
     if not user_id:
+        if wants_json_response():
+            return jsonify({"count": 0})
         return jsonify({"count": 0})
     try:
         # Fetch unread messages count
         # Note: This assumes a 'messages' table exists with 'receiver_id' and 'is_read'
         res = supabase.table("messages").select("id", count="exact").eq("receiver_id", user_id).eq("is_read", False).execute()
+        if wants_json_response():
+            return jsonify({"count": res.count})
         return jsonify({"count": res.count})
     except Exception as e:
         print(f"Error fetching message count: {e}")
+        if wants_json_response():
+            return jsonify({"count": 0})
         return jsonify({"count": 0})
-
 
 @app.route("/messages")
 @app.route("/messages/<conversation_id>")
@@ -1906,13 +2070,22 @@ def messages_page(conversation_id=None):
 
     except Exception as e:
         print(f"Error loading messages: {e}")
-        flash("Error loading messages.", "danger")
+        if not wants_json_response():
+            flash("Error loading messages.", "danger")
 
-    # Pass data to the template
-    return render_template("messages.html",
-                           conversations=conversations,
-                           active_conversation_user=active_conversation_user,
-                           messages=messages)
+    # Prepare response data
+    response_data = {
+        "conversations": conversations,
+        "active_conversation_user": active_conversation_user,
+        "messages": messages,
+        "conversation_id": conversation_id
+    }
+    
+    if wants_json_response():
+        return jsonify(response_data), 200
+    else:
+        # Pass data to the template
+        return render_template("messages.html", **response_data)
 
 @app.route("/messages/send", methods=["POST"])
 @login_required
@@ -1922,6 +2095,8 @@ def send_message():
     content = request.form.get("content")
 
     if not receiver_id or not content:
+        if wants_json_response():
+            return jsonify({"error": "Message cannot be empty."}), 400
         flash("Message cannot be empty.", "warning")
         return redirect(url_for("messages_page", conversation_id=receiver_id))
 
@@ -1963,10 +2138,15 @@ Log in to reply: {url_for('login', _external=True)}
             "type": "message"
         }).execute()
 
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Message sent!"}), 200
         flash("Message sent!", "success")
     except Exception as e:
         print(f"Error sending message: {e}")
-        flash("Failed to send message.", "danger")
+        error_msg = "Failed to send message."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
 
     return redirect(url_for("messages_page", conversation_id=receiver_id))
 
@@ -1977,6 +2157,8 @@ def search_users():
     query = request.args.get("q", "").strip().lower()
 
     if not query:
+        if wants_json_response():
+            return jsonify({"users": []})
         return jsonify({"users": []})
 
     try:
@@ -1988,9 +2170,13 @@ def search_users():
         users = res.data if res.data else []
         # Filter out users based on role if necessary (e.g., patient can only search doctors)
         # For now, return all matching users except the current one
+        if wants_json_response():
+            return jsonify({"users": users})
         return jsonify({"users": users})
     except Exception as e:
         print(f"Error searching users: {e}")
+        if wants_json_response():
+            return jsonify({"users": []}), 500
         return jsonify({"users": []}), 500
 
 @app.route("/chat", methods=["GET", "POST"])
@@ -1998,6 +2184,8 @@ def search_users():
 def chat():
     if request.method == "GET":
         chat_log = session.get("chat_log", [])
+        if wants_json_response():
+            return jsonify({"chat_log": chat_log})
         return render_template("chat.html", chat_log=chat_log)
     else:
         data = request.get_json()
@@ -2032,7 +2220,10 @@ def chat():
             }).execute()
         except Exception as e:
             print("Logging error:", e)
+        if wants_json_response():
+            return jsonify({"reply": formatted_reply})
         return jsonify({"reply": formatted_reply})
+
 @app.route("/api/chat", methods=["POST"])
 @limiter.limit("5 per minute")  # tighter limit for chat API
 def ai_chat():
@@ -2101,6 +2292,7 @@ def chat_history(user_id):
     except Exception as e:
         print("Supabase fetch failed:", e)
         return jsonify({"error": "Failed to fetch history", "details": str(e)}), 500
+
 # ============================================================
 # Routes - Doctor Features
 # ============================================================
@@ -2109,6 +2301,8 @@ def chat_history(user_id):
 @login_required
 def doctor_availability():
     if session.get("role") != "doctor":
+        if wants_json_response():
+            return jsonify({"error": "Doctor access only."}), 403
         flash("Doctor access only.", "warning")
         return redirect(url_for("login"))
 
@@ -2117,11 +2311,15 @@ def doctor_availability():
     try:
         doctor_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
         if not doctor_data:
+            if wants_json_response():
+                return jsonify({"error": "Doctor profile not found."}), 404
             flash("Doctor profile not found.", "danger")
             return redirect(url_for("doctor_dashboard"))
         doctor_id = doctor_data.data["id"]
     except Exception as e:
         print(f"Error fetching doctor profile in availability: {e}")
+        if wants_json_response():
+            return jsonify({"error": "Error accessing dashboard. Please try again later."}), 500
         flash("Error accessing dashboard. Please try again later.", "danger")
         return redirect(url_for("login"))
 
@@ -2136,6 +2334,8 @@ def doctor_availability():
             if slot_duration <= 0:
                 raise ValueError("Slot duration must be positive.")
         except ValueError:
+            if wants_json_response():
+                return jsonify({"error": "Invalid slot duration."}), 400
             flash("Invalid slot duration.", "danger")
             return redirect(url_for("doctor_availability"))
 
@@ -2149,9 +2349,13 @@ def doctor_availability():
                 "slot_duration_minutes": slot_duration,
                 "is_active": True # Default to active
             }).execute()
+            if wants_json_response():
+                return jsonify({"status": "success", "message": "Weekly availability added successfully."}), 200
             flash("Weekly availability added successfully.", "success")
         except Exception as e:
             print("Error adding weekly availability:", e)
+            if wants_json_response():
+                return jsonify({"error": "Failed to add weekly availability."}), 500
             flash("Failed to add weekly availability.", "danger")
         return redirect(url_for("doctor_availability"))
 
@@ -2159,12 +2363,20 @@ def doctor_availability():
     weekly_availability = supabase.table("doctor_weekly_availability").select("*").eq("doctor_id", doctor_id).order("day_of_week").execute().data
     # Also fetch any existing one-off availability (if you still want to support them)
     one_off_availability = supabase.table("doctor_availability").select("*").eq("doctor_id", doctor_id).order("available_date").execute().data
+    
+    if wants_json_response():
+        return jsonify({
+            "weekly_availability": weekly_availability,
+            "one_off_availability": one_off_availability
+        }), 200
     return render_template("doctor_availability.html", weekly_availability=weekly_availability, one_off_availability=one_off_availability)
 
 @app.route("/book", methods=["GET", "POST"])
 @login_required
 def book_appointment():
     if session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Login as a user to book an appointment."}), 403
         flash("Login as a user to book an appointment.", "warning")
         return redirect(url_for("login"))
 
@@ -2174,6 +2386,8 @@ def book_appointment():
         doctor_id = request.form.get("selected_doctor_id") # Assuming you pass this via hidden field in the form
 
         if not slot_time_key or not doctor_id:
+            if wants_json_response():
+                return jsonify({"error": "Invalid booking request."}), 400
             flash("Invalid booking request.", "danger")
             return redirect(url_for("book_appointment"))
 
@@ -2182,6 +2396,8 @@ def book_appointment():
             date_str, time_str = slot_time_key.split('_')
             appointment_time = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
         except ValueError:
+            if wants_json_response():
+                return jsonify({"error": "Invalid time format selected."}), 400
             flash("Invalid time format selected.", "danger")
             return redirect(url_for("book_appointment"))
 
@@ -2191,6 +2407,8 @@ def book_appointment():
         # Check for any appointment on the same date and time for this doctor
         existing_appointments = supabase.table("appointments").select("id").eq("doctor_id", doctor_id).eq("appointment_time", appointment_time.isoformat()).execute().data
         if existing_appointments:
+            if wants_json_response():
+                return jsonify({"error": "This time slot has just been booked by someone else. Please select another slot."}), 409
             flash("This time slot has just been booked by someone else. Please select another slot.", "danger")
             return redirect(url_for("book_appointment"))
 
@@ -2215,6 +2433,13 @@ def book_appointment():
         appointment_time_str = appointment_time.strftime("%Y-%m-%d at %H:%M")
         send_appointment_reminder_email(f"{doctor_id}_{appointment_time.isoformat()}", user_email, user_name, doctor_name, appointment_time_str)
 
+        if wants_json_response():
+            return jsonify({
+                "status": "success",
+                "message": "Appointment booked successfully!",
+                "appointment_id": appointment_id,
+                "meeting_url": jitsi_url
+            }), 200
         flash("Appointment booked successfully!", "success")
         return redirect(url_for("user_dashboard"))
 
@@ -2315,8 +2540,9 @@ def book_appointment():
         })
 
     # Pass the calculated available slots to the template
+    if wants_json_response():
+        return jsonify({"slots": formatted_slots}), 200
     return render_template("book_appointment.html", slots=formatted_slots)
-
 
 @app.route("/my-bookings")
 @login_required
@@ -2334,6 +2560,12 @@ def my_bookings():
             doctor_lookup = {d["id"]: d for d in doctors}
     except Exception as e:
         print("Doctor fetch error:", e)
+    
+    if wants_json_response():
+        return jsonify({
+            "appointments": appointments,
+            "doctors": doctor_lookup
+        }), 200
     return render_template("my_bookings.html", appointments=appointments, doctors=doctor_lookup)
 
 @app.route("/appointment/cancel/<appointment_id>", methods=["POST"])
@@ -2341,6 +2573,8 @@ def my_bookings():
 def cancel_appointment(appointment_id):
     user_id = session.get("user_id")
     if not user_id or session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
         flash("Access denied.", "danger")
         return redirect(url_for("user_dashboard"))
 
@@ -2350,11 +2584,15 @@ def cancel_appointment(appointment_id):
         appointment = appointment_data.data
 
         if not appointment:
+            if wants_json_response():
+                return jsonify({"error": "Appointment not found or does not belong to you."}), 404
             flash("Appointment not found or does not belong to you.", "danger")
             return redirect(url_for("my_bookings")) # Or user_dashboard
 
         # Check if status allows cancellation (e.g., not already cancelled or completed)
         if appointment.get("status") in ["cancelled", "completed"]:
+            if wants_json_response():
+                return jsonify({"error": "This appointment cannot be cancelled."}), 400
             flash("This appointment cannot be cancelled.", "warning")
             return redirect(url_for("my_bookings")) # Or user_dashboard
 
@@ -2367,12 +2605,19 @@ def cancel_appointment(appointment_id):
         # supabase.table("doctor_availability").update({"is_booked": False}).eq("id", appointment.get("slot_id")).execute()
         # But with the new system, the slot availability is recalculated, so just changing status is enough.
 
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Appointment cancelled successfully."}), 200
         flash("Appointment cancelled successfully.", "success")
     except Exception as e:
         print(f"Error cancelling appointment: {e}")
-        flash("Failed to cancel appointment. Please try again.", "danger")
+        error_msg = "Failed to cancel appointment. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
 
     # Redirect back to where the user came from (e.g., user dashboard or my bookings)
+    if wants_json_response():
+        return jsonify({"status": "success", "message": "Appointment cancelled successfully."}), 200
     return redirect(request.referrer or url_for("user_dashboard"))
 
 @app.route("/appointment/reschedule/<appointment_id>", methods=["GET", "POST"])
@@ -2380,6 +2625,8 @@ def cancel_appointment(appointment_id):
 def reschedule_appointment(appointment_id):
     user_id = session.get("user_id")
     if not user_id or session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
         flash("Access denied.", "danger")
         return redirect(url_for("user_dashboard"))
 
@@ -2388,20 +2635,29 @@ def reschedule_appointment(appointment_id):
         appointment_data = supabase.table("appointments").select("*").eq("id", appointment_id).eq("user_id", user_id).single().execute()
         appointment = appointment_data.data
         if not appointment:
+            if wants_json_response():
+                return jsonify({"error": "Appointment not found or does not belong to you."}), 404
             flash("Appointment not found or does not belong to you.", "danger")
             return redirect(url_for("my_bookings"))
         if appointment.get("status") != "pending":
+            if wants_json_response():
+                return jsonify({"error": "Only pending appointments can be rescheduled."}), 400
             flash("Only pending appointments can be rescheduled.", "warning")
             return redirect(url_for("my_bookings"))
     except Exception as e:
         print(f"Error fetching appointment for rescheduling: {e}")
-        flash("Failed to fetch appointment details.", "danger")
+        error_msg = "Failed to fetch appointment details."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("my_bookings"))
 
     if request.method == "POST":
         # Handle the rescheduling
         new_slot_time_key = request.form.get("new_slot_time_key")
         if not new_slot_time_key:
+            if wants_json_response():
+                return jsonify({"error": "Please select a new time slot."}), 400
             flash("Please select a new time slot.", "danger")
             return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
 
@@ -2414,6 +2670,8 @@ def reschedule_appointment(appointment_id):
             # Check if the new slot is still available
             existing_appointments = supabase.table("appointments").select("id").eq("doctor_id", doctor_id).eq("appointment_time", new_appointment_time.isoformat()).execute().data
             if existing_appointments:
+                if wants_json_response():
+                    return jsonify({"error": "The selected new time slot is no longer available."}), 409
                 flash("The selected new time slot is no longer available.", "danger")
                 return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
 
@@ -2423,15 +2681,22 @@ def reschedule_appointment(appointment_id):
                 "status": "pending" # Reset status in case it was changed
             }).eq("id", appointment_id).execute()
 
+            if wants_json_response():
+                return jsonify({"status": "success", "message": "Appointment rescheduled successfully!"}), 200
             flash("Appointment rescheduled successfully!", "success")
             return redirect(url_for("my_bookings")) # Or user_dashboard
 
         except ValueError:
+            if wants_json_response():
+                return jsonify({"error": "Invalid time format selected."}), 400
             flash("Invalid time format selected.", "danger")
             return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
         except Exception as e:
             print(f"Error rescheduling appointment: {e}")
-            flash("Failed to reschedule appointment. Please try again.", "danger")
+            error_msg = "Failed to reschedule appointment. Please try again."
+            if wants_json_response():
+                return jsonify({"error": error_msg}), 500
+            flash(error_msg, "danger")
             return redirect(url_for("reschedule_appointment", appointment_id=appointment_id))
 
     # GET request: Show available slots for the same doctor
@@ -2486,6 +2751,11 @@ def reschedule_appointment(appointment_id):
                 current_time += timedelta(minutes=slot_duration)
 
     # Pass the appointment details and available slots to the template
+    if wants_json_response():
+        return jsonify({
+            "appointment": appointment,
+            "available_slots": available_calculated_slots
+        }), 200
     return render_template("reschedule_appointment.html", appointment=appointment, available_slots=available_calculated_slots)
 
 @app.route("/appointment/confirm/<appointment_id>", methods=["POST"])
@@ -2493,6 +2763,8 @@ def reschedule_appointment(appointment_id):
 def confirm_appointment(appointment_id):
     doctor_id = session.get("user_id") # For doctors, session user_id is their doctor ID
     if not doctor_id or session.get("role") != "doctor":
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
         flash("Access denied.", "danger")
         return redirect(url_for("login"))
 
@@ -2502,11 +2774,15 @@ def confirm_appointment(appointment_id):
         appointment = appointment_data.data
 
         if not appointment:
+            if wants_json_response():
+                return jsonify({"error": "Appointment not found or does not belong to you."}), 404
             flash("Appointment not found or does not belong to you.", "danger")
             return redirect(url_for("doctor_dashboard"))
 
         # Check if status allows confirmation (e.g., not already confirmed/cancelled)
         if appointment.get("status") != "pending":
+            if wants_json_response():
+                return jsonify({"error": "This appointment cannot be confirmed."}), 400
             flash("This appointment cannot be confirmed.", "warning")
             return redirect(url_for("doctor_dashboard"))
 
@@ -2531,12 +2807,19 @@ def confirm_appointment(appointment_id):
         # --- NEW: Send Notification to User ---
         create_notification(user_id, "appointment_confirmed_by_doctor", f"Your appointment with Dr. {doctor_name} on {appointment_time_str} has been confirmed by the doctor.")
 
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Appointment confirmed successfully."}), 200
         flash("Appointment confirmed successfully.", "success")
     except Exception as e:
         print(f"Error confirming appointment: {e}")
-        flash("Failed to confirm appointment. Please try again.", "danger")
+        error_msg = "Failed to confirm appointment. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
 
     # Redirect back to doctor dashboard
+    if wants_json_response():
+        return jsonify({"status": "success", "message": "Appointment confirmed successfully."}), 200
     return redirect(url_for("doctor_dashboard"))
 
 @app.route("/appointment/reject/<appointment_id>", methods=["POST"])
@@ -2544,6 +2827,8 @@ def confirm_appointment(appointment_id):
 def reject_appointment(appointment_id):
     doctor_id = session.get("user_id") # For doctors, session user_id is their doctor ID
     if not doctor_id or session.get("role") != "doctor":
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
         flash("Access denied.", "danger")
         return redirect(url_for("login"))
 
@@ -2553,11 +2838,15 @@ def reject_appointment(appointment_id):
         appointment = appointment_data.data
 
         if not appointment:
+            if wants_json_response():
+                return jsonify({"error": "Appointment not found or does not belong to you."}), 404
             flash("Appointment not found or does not belong to you.", "danger")
             return redirect(url_for("doctor_dashboard"))
 
         # Check if status allows rejection (e.g., not already confirmed/cancelled)
         if appointment.get("status") != "pending":
+            if wants_json_response():
+                return jsonify({"error": "This appointment cannot be rejected."}), 400
             flash("This appointment cannot be rejected.", "warning")
             return redirect(url_for("doctor_dashboard"))
 
@@ -2581,14 +2870,20 @@ def reject_appointment(appointment_id):
         # Send Notification to User
         create_notification(user_id, "appointment_rejected_by_doctor", f"Your appointment with Dr. {doctor_name} on {appointment_time_str} has been rejected by the doctor.")
 
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Appointment rejected successfully."}), 200
         flash("Appointment rejected successfully.", "info") # Use 'info' for rejection
     except Exception as e:
         print(f"Error rejecting appointment: {e}")
-        flash("Failed to reject appointment. Please try again.", "danger")
+        error_msg = "Failed to reject appointment. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
 
     # Redirect back to doctor dashboard
+    if wants_json_response():
+        return jsonify({"status": "success", "message": "Appointment rejected successfully."}), 200
     return redirect(url_for("doctor_dashboard"))
-
 
 @app.route("/appointment/chat/<appointment_id>", methods=["GET", "POST"])
 @login_required
@@ -2597,6 +2892,8 @@ def appointment_chat(appointment_id):
     role = session.get("role")
 
     if not user_id or role not in ["user", "doctor"]:
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
         flash("Access denied.", "danger")
         return redirect(url_for("login"))
 
@@ -2607,11 +2904,17 @@ def appointment_chat(appointment_id):
         appointment = appointment_data.data
     except Exception as e:
         print(f"Error fetching appointment {appointment_id}: {e}")
-        flash("Appointment not found.", "danger")
+        error_msg = "Appointment not found."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 404
+        flash(error_msg, "danger")
         return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
 
     if not appointment:
-        flash("Appointment not found.", "danger")
+        error_msg = "Appointment not found."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 404
+        flash(error_msg, "danger")
         return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
 
     # Check if user is the patient or the doctor for this appointment
@@ -2619,14 +2922,20 @@ def appointment_chat(appointment_id):
     is_doctor = (role == "doctor" and appointment["doctor_id"] == user_id)
 
     if not (is_patient or is_doctor):
-        flash("Access denied. You are not authorized to chat for this appointment.", "danger")
+        error_msg = "Access denied. You are not authorized to chat for this appointment."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 403
+        flash(error_msg, "danger")
         return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
 
     # Check if appointment is confirmed (or at least pending) before allowing chat
     # You might want to allow chat even for pending appointments, or only confirmed ones.
     # Let's allow it for confirmed or pending.
     if appointment["status"] not in ["confirmed", "pending"]:
-        flash("Chat is not available for this appointment status.", "warning")
+        error_msg = "Chat is not available for this appointment status."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 400
+        flash(error_msg, "warning")
         return redirect(url_for("user_dashboard" if role == "user" else "doctor_dashboard"))
 
     # Determine the other participant in the chat
@@ -2647,11 +2956,18 @@ def appointment_chat(appointment_id):
                     "appointment_id": appointment_id,
                     "message": message_content
                 }).execute()
+                if wants_json_response():
+                    return jsonify({"status": "success", "message": "Message sent!"}), 200
                 flash("Message sent!", "success")
             except Exception as e:
                 print(f"Error sending appointment message: {e}")
-                flash("Failed to send message. Please try again.", "danger")
+                error_msg = "Failed to send message. Please try again."
+                if wants_json_response():
+                    return jsonify({"error": error_msg}), 500
+                flash(error_msg, "danger")
         # Redirect back to the same chat page to refresh messages
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Message sent!"}), 200
         return redirect(url_for("appointment_chat", appointment_id=appointment_id))
 
     # Handle fetching messages (GET or after POST redirect)
@@ -2674,14 +2990,22 @@ def appointment_chat(appointment_id):
     except Exception as e:
         print(f"Error fetching appointment messages for appointment {appointment_id}: {e}")
         all_messages = [] # Default to empty list if fetch fails
-        flash("Error loading messages. Please try again later.", "warning")
+        error_msg = "Error loading messages. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "warning")
 
     # Pass appointment, other user details, and messages to the template
+    if wants_json_response():
+        return jsonify({
+            "appointment": appointment,
+            "other_user": {"id": other_user_id, "name": other_user_name, "email": other_user_email},
+            "messages": all_messages
+        }), 200
     return render_template("appointment_chat.html",
                            appointment=appointment,
                            other_user={"id": other_user_id, "name": other_user_name, "email": other_user_email},
                            messages=all_messages)
-
 
 @app.route("/api/appointment/chat/<appointment_id>/unread_count") # Optional: API endpoint for unread count specific to this chat
 @login_required
@@ -2694,18 +3018,25 @@ def get_appointment_chat_unread_count(appointment_id):
         appointment_data = supabase.table("appointments").select("user_id, doctor_id").eq("id", appointment_id).single().execute()
         appointment = appointment_data.data
         if not appointment or not ((role == "user" and appointment["user_id"] == user_id) or (role == "doctor" and appointment["doctor_id"] == user_id)):
-             return jsonify({"count": 0})
+            if wants_json_response():
+                return jsonify({"count": 0})
+            return jsonify({"count": 0})
     except:
+        if wants_json_response():
+            return jsonify({"count": 0})
         return jsonify({"count": 0})
 
     try:
         # Count unread messages in the NEW appointment_messages table
         res = supabase.table("appointment_messages").select("id", count="exact").eq("receiver_id", user_id).eq("appointment_id", appointment_id).eq("is_read", False).execute()
+        if wants_json_response():
+            return jsonify({"count": res.count})
         return jsonify({"count": res.count})
     except Exception as e:
         print(f"Error fetching appointment chat unread count: {e}")
+        if wants_json_response():
+            return jsonify({"count": 0})
         return jsonify({"count": 0})
-
 
 
 # ============================================================
@@ -2722,21 +3053,33 @@ def pricing():
         plans.sort(key=lambda x: float(x["price"]))
     except Exception as e:
         print(f"Error fetching plans: {e}")
+        if wants_json_response():
+            return jsonify({"error": "Error loading plans. Please try again later.", "plans": []}), 500
         flash("Error loading plans. Please try again later.", "danger")
         plans = [] # Fallback to empty list if fetch fails
+    
+    if wants_json_response():
+        return jsonify({"plans": plans}), 200
     return render_template("pricing.html", plans=plans) 
+
 @app.route("/subscribe/<plan_name>", methods=["GET", "POST"])
 @login_required
 def subscribe(plan_name):
     if session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Only users can subscribe."}), 403
         flash("Only users can subscribe.", "danger")
         return redirect(url_for("user_dashboard"))
+    
     # Fetch selected plan
     plan_response = supabase.table("subscription_plans").select("*").eq("name", plan_name).execute()
     plan = plan_response.data[0] if plan_response.data else None
     if not plan:
+        if wants_json_response():
+            return jsonify({"error": "Plan not found."}), 404
         flash("Plan not found.", "danger")
         return redirect(url_for("user_dashboard"))
+    
     user_id = session["user_id"]
     if request.method == "POST":
         # Create Paystack transaction
@@ -2759,17 +3102,33 @@ def subscribe(plan_name):
         res_data = response.json()
         if res_data.get("status"):
             auth_url = res_data["data"]["authorization_url"]
+            if wants_json_response():
+                return jsonify({
+                    "status": "success", 
+                    "payment_url": auth_url,
+                    "message": "Payment initialization successful"
+                }), 200
             return redirect(auth_url)
         else:
-            flash("Failed to initialize payment.", "danger")
+            error_msg = "Failed to initialize payment."
+            if wants_json_response():
+                return jsonify({"error": error_msg}), 400
+            flash(error_msg, "danger")
+    
+    if wants_json_response():
+        return jsonify({"plan": plan, "public_key": PAYSTACK_PUBLIC_KEY}), 200
     return render_template("subscribe_confirm.html", plan=plan, PAYSTACK_PUBLIC_KEY=PAYSTACK_PUBLIC_KEY)
+
 @app.route("/verify_payment")
 @login_required
 def verify_payment():
     reference = request.args.get("reference")
     if not reference:
+        if wants_json_response():
+            return jsonify({"error": "Missing payment reference."}), 400
         flash("Missing payment reference.", "danger")
         return redirect(url_for("user_dashboard"))
+    
     headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
     response = requests.get(f"https://api.paystack.co/transaction/verify/{reference}", headers=headers)
     res_data = response.json()
@@ -2784,21 +3143,38 @@ def verify_payment():
             "status": "active",
             "start_date": datetime.now(timezone.utc).isoformat()
         }).execute()
-        flash("Subscription successful!", "success")
+        success_msg = "Subscription successful!"
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
     else:
-        flash("Payment verification failed.", "danger")
+        error_msg = "Payment verification failed."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 400
+        flash(error_msg, "danger")
+    
+    if wants_json_response():
+        return jsonify({"status": "verification_complete"}), 200
     return redirect(url_for("user_dashboard"))
+
 @app.route("/user/subscriptions/cancel/<sub_id>", methods=["POST"])
 @login_required
 def cancel_subscription(sub_id):
     if session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Unauthorized"}), 403
         flash("Unauthorized", "danger")
         return redirect(url_for("user_dashboard"))
+    
     user_id = session.get("user_id")
     # Update status to cancelled
     supabase.table("user_subscriptions").update({"status": "cancelled"}).eq("id", sub_id).eq("user_id", user_id).execute()
-    flash("Subscription cancelled.", "info")
+    success_msg = "Subscription cancelled."
+    if wants_json_response():
+        return jsonify({"status": "success", "message": success_msg}), 200
+    flash(success_msg, "info")
     return redirect(url_for("user_dashboard"))
+
 # ============================================================
 # Routes - Dashboards
 # ============================================================
@@ -2808,24 +3184,32 @@ def cancel_subscription(sub_id):
 def doctor_dashboard():
     # Check if user is logged in as a doctor
     if session.get("role") != "doctor":
+        if wants_json_response():
+            return jsonify({"error": "Access denied. Doctors only."}), 403
         flash("Access denied. Doctors only.", "danger")
         return redirect(url_for("login"))
+    
     user_id = session.get("id")
     doctor_id = session.get("id") # Assuming this is set during login for doctors
     # If doctor_id isn't in session, fetch it from the doctors table
     if not doctor_id:
         try:
             doc_data = supabase.table("doctors").select("id").eq("id", user_id).single().execute()
-            if doc_data and doc_data:
+            if doc_data and doc_data.data:
                 doctor_id = doc_data.data["id"]
                 session["doctor_id"] = doctor_id # Store for future use in this session
             else:
+                if wants_json_response():
+                    return jsonify({"error": "Doctor profile not found. Please contact support."}), 400
                 flash("Doctor profile not found. Please contact support.", "danger")
                 return redirect(url_for("login"))
         except Exception as e:
             print(f"Error fetching doctor ID: {e}")
+            if wants_json_response():
+                return jsonify({"error": "Error accessing dashboard. Please try again later."}), 500
             flash("Error accessing dashboard. Please try again later.", "danger")
             return redirect(url_for("login"))
+    
     try:
         # Fetch doctor profile details (name, email, bio, specialization from users and doctors tables)
         user_data = supabase.table("users").select("name, email").eq("id", user_id).single().execute().data
@@ -2845,8 +3229,21 @@ def doctor_dashboard():
             patient_details = {u["id"]: u for u in users_info}
     except Exception as e:
         print(f"Error fetching doctor dashboard data: {e}")
-        flash("Error loading dashboard data. Please try again later.", "danger")
+        error_msg = "Error loading dashboard data. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("login")) # Or render a partial template
+    
+    response_data = {
+        "profile": profile_info,
+        "availability_slots": availability_slots,
+        "booked_appointments": booked_appointments,
+        "patient_details": patient_details
+    }
+    
+    if wants_json_response():
+        return jsonify(response_data), 200
     return render_template(
         "doctor_dashboard.html",
         profile=profile_info,
@@ -2855,7 +3252,6 @@ def doctor_dashboard():
         patient_details=patient_details,
         timedelta=timedelta
     )
-    
 
 @app.route('/doctor/appointments')
 @login_required
@@ -2870,6 +3266,8 @@ def doctor_appointments():
     print(f"DEBUG: Session contents: {session}") # Debug print
 
     if not doctor_id:
+        if wants_json_response():
+            return jsonify({"error": "Session error. Please log in again."}), 400
         flash("Session error. Please log in again.", "danger")
         return redirect(url_for("login"))
 
@@ -2903,18 +3301,31 @@ def doctor_appointments():
             "pending": len(pending_appointments),
             "completed": len(completed_appointments)
         }
-
+        
+        response_data = {
+            "appointments": appointments,
+            "patient_details": patient_details,
+            "patient_profile_details": patient_profile_details,
+            "stats": stats
+        }
+        
+        if wants_json_response():
+            return jsonify(response_data), 200
         return render_template("doctor_appointments.html", appointments=appointments, patient_details=patient_details, patient_profile_details=patient_profile_details, stats=stats, timedelta=timedelta)
     except Exception as e:
         print(f"Error fetching doctor appointments: {e}")
-        flash("Error loading appointments. Please try again later.", "danger")
+        error_msg = "Error loading appointments. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("doctor_dashboard"))
-    
-  
+
 @app.route('/rate_doctor/<doctor_id>', methods=['POST'])
 @login_required
 def rate_doctor(doctor_id):
     if session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Only patients can rate doctors."}), 403
         flash("Only patients can rate doctors.", "warning")
         return redirect(url_for("user_dashboard")) # Or appropriate redirect
 
@@ -2925,10 +3336,16 @@ def rate_doctor(doctor_id):
     try:
         rating = int(rating_str)
         if not (1 <= rating <= 5):
-            flash("Please provide a valid rating (1–5).", "danger")
+            error_msg = "Please provide a valid rating (1–5)."
+            if wants_json_response():
+                return jsonify({"error": error_msg}), 400
+            flash(error_msg, "danger")
             return redirect(request.referrer or url_for("user_dashboard"))
     except (ValueError, TypeError):
-        flash("Invalid rating value.", "danger")
+        error_msg = "Invalid rating value."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 400
+        flash(error_msg, "danger")
         return redirect(request.referrer or url_for("user_dashboard"))
 
     try:
@@ -2953,19 +3370,28 @@ def rate_doctor(doctor_id):
             "rating_count": new_count
         }).eq("id", doctor_id).execute()
 
-        flash("Thank you for your feedback!", "success")
+        success_msg = "Thank you for your feedback!"
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
     except Exception as e:
         print(f"Rating error: {e}")
-        flash("Failed to submit rating.", "danger")
+        error_msg = "Failed to submit rating."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
 
     # Redirect back to where the user came from (e.g., bookings page)
+    if wants_json_response():
+        return jsonify({"status": "success", "message": "Thank you for your feedback!"}), 200
     return redirect(request.referrer or url_for("user_dashboard"))
-   
-    
+
 @app.route("/user/dashboard")
 @login_required
 def user_dashboard():
     if session.get("role") != "user":
+        if wants_json_response():
+            return jsonify({"error": "Access denied. Users only."}), 403
         flash("Access denied. Users only.", "danger")
         return redirect(url_for("login"))
     user_id = session.get("user_id")
@@ -3015,9 +3441,26 @@ def user_dashboard():
                 plan_info = latest_sub.get("subscription_plans", {})
                 current_plan_is_free = plan_info.get("is_free", True)
     except Exception as e:
-        print(f"Error fetching user dashboard  {e}")
-        flash("Error loading dashboard data. Please try again later.", "danger")
+        print(f"Error fetching user dashboard data: {e}")
+        error_msg = "Error loading dashboard data. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("login")) # Or render a partial template
+    
+    response_data = {
+        "user": user_data,
+        "records": records,
+        "chart_labels": labels,
+        "chart_scores": scores,
+        "appointments": appointments,
+        "doctor_details": doctor_details,
+        "user_subscriptions": user_subscriptions,
+        "current_plan_is_free": current_plan_is_free
+    }
+    
+    if wants_json_response():
+        return jsonify(response_data), 200
     return render_template(
         "user_dashboard.html",
         user=user_data,
@@ -3030,10 +3473,13 @@ def user_dashboard():
         current_plan_is_free=current_plan_is_free, # Pass plan status for UI
         timedelta=timedelta
     )
+
 @app.route("/admin/dashboard")
 @login_required
 def admin_dashboard():
     if session.get("role") != "admin":
+        if wants_json_response():
+            return jsonify({"error": "Access denied. Admins only."}), 403
         flash("Access denied. Admins only.", "danger")
         return redirect(url_for("login"))
     try:
@@ -3103,8 +3549,35 @@ def admin_dashboard():
             user_lookup_for_subs = {}
     except Exception as e:
         print(f"Error fetching admin dashboard data: {e}")
-        flash("Error loading dashboard data. Please try again later.", "danger")
+        error_msg = "Error loading dashboard data. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("admin_dashboard")) # Or render a partial template
+    
+    response_data = {
+        "total_users": total_users,
+        "total_doctors": total_doctors,
+        "total_admins": total_admins,
+        "total_records": total_records,
+        "total_chats": total_chats,
+        "total_appointments": total_appointments,
+        "admins": admins,
+        "record_type_labels": list(type_count.keys()),
+        "record_type_counts": list(type_count.values()),
+        "user_role_labels": list(role_counts.keys()),
+        "user_role_counts": list(role_counts.values()),
+        "appointment_status_labels": list(status_counts.keys()),
+        "appointment_status_counts": list(status_counts.values()),
+        "activity_labels": activity_labels,
+        "user_activity_data": user_activity_data,
+        "appt_activity_data": appt_activity_data,
+        "user_subscriptions": user_subscriptions,
+        "user_lookup_for_subs": user_lookup_for_subs
+    }
+    
+    if wants_json_response():
+        return jsonify(response_data), 200
     return render_template(
         "admin_dashboard.html",
         total_users=total_users,
@@ -3129,13 +3602,13 @@ def admin_dashboard():
         user_lookup_for_subs=user_lookup_for_subs,
         timedelta=timedelta
     )
+
 def log_activity(user_id, plan_id, activity_type):
     supabase.table("user_subscription_activity").insert({
         "user_id": user_id,
         "plan_id": plan_id,
         "activity_type": activity_type
     }).execute()
-
 
 # --- Health Case File Routes ---
 @app.route('/patient_health_records')
@@ -3151,6 +3624,8 @@ def patient_health_records():
     print(f"DEBUG: Session contents: {session}") # Add this line for debugging
 
     if not user_id: # Add this check
+        if wants_json_response():
+            return jsonify({"error": "Session error. Please log in again."}), 400
         flash("Session error. Please log in again.", "danger")
         return redirect(url_for("login"))
 
@@ -3167,16 +3642,27 @@ def patient_health_records():
              appointments = {appt["id"]: appt for appt in appts_resp.data}
 
         # Fetch doctor names for the appointments
-        doctor_ids = list(set([appt["doctor_id"] for appt in appointments.values()]))
+        doctor_ids = list(set([appt["doctor_id"] for appt in appointments.values()] if appointments else []))
         doctors = {}
         if doctor_ids:
             doctors_resp = supabase.table("users").select("id, name").in_("id", doctor_ids).execute()
             doctors = {doc["id"]: doc["name"] for doc in doctors_resp.data}
-
+        
+        response_data = {
+            "records": records,
+            "appointments": appointments,
+            "doctors": doctors
+        }
+        
+        if wants_json_response():
+            return jsonify(response_data), 200
         return render_template("patient_health_records.html", records=records, appointments=appointments, doctors=doctors)
     except Exception as e:
         print(f"Error fetching patient records: {e}")
-        flash("Error loading records. Please try again later.", "danger")
+        error_msg = "Error loading records. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("user_dashboard"))
 
 @app.route('/doctor_health_records')
@@ -3205,11 +3691,22 @@ def doctor_health_records():
         if patient_ids:
              patients_resp = supabase.table("users").select("id, name, email").in_("id", patient_ids).execute()
              patients = {p["id"]: p for p in patients_resp.data}
-
+        
+        response_data = {
+            "records": records,
+            "appointments": appointments,
+            "patients": patients
+        }
+        
+        if wants_json_response():
+            return jsonify(response_data), 200
         return render_template("doctor_health_records.html", records=records, appointments=appointments, patients=patients)
     except Exception as e:
         print(f"Error fetching doctor records: {e}")
-        flash("Error loading records. Please try again later.", "danger")
+        error_msg = "Error loading records. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("doctor_dashboard"))
 
 @app.route('/health_record/<record_id>')
@@ -3224,6 +3721,8 @@ def view_health_record(record_id):
         # Fetch the main health record
         record_resp = supabase.table("health_records").select("*").eq("id", record_id).single().execute()
         if not record_resp.data:
+            if wants_json_response():
+                return jsonify({"error": "Record not found."}), 404
             flash("Record not found.", "danger")
             return redirect(url_for("user_dashboard" if session.get("role") == "user" else "doctor_dashboard"))
 
@@ -3255,7 +3754,21 @@ def view_health_record(record_id):
         patient_info = patient_info_resp.data if patient_info_resp.data else {"name": "Unknown Patient"}
         doctor_info = doctor_info_resp.data if doctor_info_resp.data else {"name": "Unknown Doctor"}
         doctor_spec = doctor_spec_resp.data.get("specialization", "N/A") if doctor_spec_resp.data else "N/A"
-
+        
+        response_data = {
+            "record": record,
+            "vital_signs": vital_signs,
+            "investigations": investigations,
+            "prescriptions": prescriptions,
+            "billing": billing,
+            "consents": consents,
+            "patient_info": patient_info,
+            "doctor_info": doctor_info,
+            "doctor_spec": doctor_spec
+        }
+        
+        if wants_json_response():
+            return jsonify(response_data), 200
         return render_template(
             "view_health_record.html",
             record=record,
@@ -3270,7 +3783,10 @@ def view_health_record(record_id):
         )
     except Exception as e:
         print(f"Error fetching health record: {e}")
-        flash("Error loading record. Please try again later.", "danger")
+        error_msg = "Error loading record. Please try again later."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("user_dashboard" if session.get("role") == "user" else "doctor_dashboard"))
 
 @app.route('/create_health_record/<appointment_id>', methods=["GET", "POST"])
@@ -3290,10 +3806,19 @@ def create_health_record(appointment_id):
             appt_data = appt_resp.data
             patient_resp = supabase.table("users").select("name").eq("id", appt_data["user_id"]).single().execute()
             patient_name = patient_resp.data["name"]
+            
+            if wants_json_response():
+                return jsonify({
+                    "appointment": appt_data,
+                    "patient_name": patient_name
+                }), 200
             return render_template("create_health_record.html", appointment=appt_data, patient_name=patient_name)
         except Exception as e:
             print(f"Error fetching appointment/patient for form: {e}")
-            flash("Error loading appointment details.", "danger")
+            error_msg = "Error loading appointment details."
+            if wants_json_response():
+                return jsonify({"error": error_msg}), 500
+            flash(error_msg, "danger")
             return redirect(url_for("doctor_dashboard"))
 
     # Process POST request
@@ -3301,6 +3826,8 @@ def create_health_record(appointment_id):
 
     errors = validate_health_record_data(data)
     if errors:
+        if wants_json_response():
+            return jsonify({"errors": errors}), 400
         for error in errors:
             flash(error, "danger")
         return redirect(url_for("create_health_record", appointment_id=appointment_id))
@@ -3312,14 +3839,20 @@ def create_health_record(appointment_id):
         # Verify the appointment belongs to this doctor and get patient_id
         appt_data = supabase.table("appointments").select("user_id").eq("id", appointment_id).eq("doctor_id", doctor_id).single().execute().data
         if not appt_data:
-             flash("Invalid appointment or access denied.", "danger")
-             return redirect(url_for("doctor_dashboard"))
+            error_msg = "Invalid appointment or access denied."
+            if wants_json_response():
+                return jsonify({"error": error_msg}), 403
+            flash(error_msg, "danger")
+            return redirect(url_for("doctor_dashboard"))
         actual_patient_id = appt_data["user_id"]
 
         # Ensure patient_id from form matches the appointment's user_id (if provided)
         if patient_id and patient_id != actual_patient_id:
-             flash("Patient ID mismatch with appointment.", "danger")
-             return redirect(url_for("create_health_record", appointment_id=appointment_id))
+            error_msg = "Patient ID mismatch with appointment."
+            if wants_json_response():
+                return jsonify({"error": error_msg}), 400
+            flash(error_msg, "danger")
+            return redirect(url_for("create_health_record", appointment_id=appointment_id))
 
         # Prepare data for insertion
         record_data = {
@@ -3348,12 +3881,18 @@ def create_health_record(appointment_id):
         result = supabase.table("health_records").insert(record_data).execute()
         new_record_id = result.data[0]["id"]
 
-        flash("Health record created successfully.", "success")
+        success_msg = "Health record created successfully."
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg, "record_id": new_record_id}), 201
+        flash(success_msg, "success")
         return redirect(url_for("view_health_record", record_id=new_record_id))
 
     except Exception as e:
         print(f"Error creating health record: {e}")
-        flash("Error creating record. Please try again.", "danger")
+        error_msg = "Error creating record. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("create_health_record", appointment_id=appointment_id))
 
 @app.route('/add_vital_signs/<record_id>', methods=["POST"])
@@ -3364,12 +3903,16 @@ def add_vital_signs(record_id):
     """Add vital signs to an existing health record."""
     # Validate record_id format
     if not validate_uuid_format(record_id):
+        if wants_json_response():
+            return jsonify({"error": "Invalid record ID."}), 400
         flash("Invalid record ID.", "danger")
         return redirect(url_for("doctor_dashboard"))
 
     data = request.form # Or request.json
     errors = validate_vital_signs_data(data)
     if errors:
+        if wants_json_response():
+            return jsonify({"errors": errors}), 400
         for error in errors:
             flash(error, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
@@ -3400,12 +3943,18 @@ def add_vital_signs(record_id):
             vital_data["bmi"] = None # Explicitly set to null if calculation is not possible
 
         supabase.table("vital_signs").insert(vital_data).execute()
-        flash("Vital signs added successfully.", "success")
+        success_msg = "Vital signs added successfully."
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
         return redirect(url_for("view_health_record", record_id=record_id))
 
     except Exception as e:
         print(f"Error adding vital signs: {e}")
-        flash("Error adding vital signs. Please try again.", "danger")
+        error_msg = "Error adding vital signs. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
 
 @app.route('/add_prescription/<record_id>', methods=["POST"])
@@ -3415,12 +3964,16 @@ def add_vital_signs(record_id):
 def add_prescription(record_id):
     """Add a prescription to an existing health record."""
     if not validate_uuid_format(record_id):
+        if wants_json_response():
+            return jsonify({"error": "Invalid record ID."}), 400
         flash("Invalid record ID.", "danger")
         return redirect(url_for("doctor_dashboard"))
 
     data = request.form # Or request.json
     errors = validate_prescription_data(data)
     if errors:
+        if wants_json_response():
+            return jsonify({"errors": errors}), 400
         for error in errors:
             flash(error, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
@@ -3441,12 +3994,18 @@ def add_prescription(record_id):
         }
 
         supabase.table("prescriptions").insert(prescription_data).execute()
-        flash("Prescription added successfully.", "success")
+        success_msg = "Prescription added successfully."
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
         return redirect(url_for("view_health_record", record_id=record_id))
 
     except Exception as e:
         print(f"Error adding prescription: {e}")
-        flash("Error adding prescription. Please try again.", "danger")
+        error_msg = "Error adding prescription. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
 
 @app.route('/add_investigation/<record_id>', methods=["POST"])
@@ -3456,12 +4015,16 @@ def add_prescription(record_id):
 def add_investigation(record_id):
     """Add an investigation request to an existing health record."""
     if not validate_uuid_format(record_id):
+        if wants_json_response():
+            return jsonify({"error": "Invalid record ID."}), 400
         flash("Invalid record ID.", "danger")
         return redirect(url_for("doctor_dashboard"))
 
     data = request.form # Or request.json
     errors = validate_investigation_data(data)
     if errors:
+        if wants_json_response():
+            return jsonify({"errors": errors}), 400
         for error in errors:
             flash(error, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
@@ -3481,12 +4044,18 @@ def add_investigation(record_id):
         }
 
         supabase.table("investigations").insert(investigation_data).execute()
-        flash("Investigation added successfully.", "success")
+        success_msg = "Investigation added successfully."
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
         return redirect(url_for("view_health_record", record_id=record_id))
 
     except Exception as e:
         print(f"Error adding investigation: {e}")
-        flash("Error adding investigation. Please try again.", "danger")
+        error_msg = "Error adding investigation. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
 
 # --- Optional: Routes for updating billing/consents if needed by doctors ---
@@ -3498,12 +4067,16 @@ def add_investigation(record_id):
 def add_billing(record_id):
     """Add/update billing information for a health record."""
     if not validate_uuid_format(record_id):
+        if wants_json_response():
+            return jsonify({"error": "Invalid record ID."}), 400
         flash("Invalid record ID.", "danger")
         return redirect(url_for("doctor_dashboard"))
 
     data = request.form # Or request.json
     errors = validate_billing_data(data)
     if errors:
+        if wants_json_response():
+            return jsonify({"errors": errors}), 400
         for error in errors:
             flash(error, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
@@ -3523,7 +4096,7 @@ def add_billing(record_id):
                  "insurance_details": json.loads(data.get("insurance_details", "{}"))
              }
              supabase.table("billing_records").update(billing_data).eq("health_record_id", record_id).execute()
-             flash("Billing information updated successfully.", "success")
+             success_msg = "Billing information updated successfully."
         else:
              # If not exists, create a new record
              billing_data = {
@@ -3537,13 +4110,19 @@ def add_billing(record_id):
                  "insurance_details": json.loads(data.get("insurance_details", "{}"))
              }
              supabase.table("billing_records").insert(billing_data).execute()
-             flash("Billing information added successfully.", "success")
+             success_msg = "Billing information added successfully."
 
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
         return redirect(url_for("view_health_record", record_id=record_id))
 
     except Exception as e:
         print(f"Error adding/updating billing: {e}")
-        flash("Error processing billing information. Please try again.", "danger")
+        error_msg = "Error processing billing information. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
 
 @app.route('/add_consent/<record_id>', methods=["POST"])
@@ -3553,12 +4132,16 @@ def add_billing(record_id):
 def add_consent(record_id):
     """Add a consent record for a health record."""
     if not validate_uuid_format(record_id):
+        if wants_json_response():
+            return jsonify({"error": "Invalid record ID."}), 400
         flash("Invalid record ID.", "danger")
         return redirect(url_for("doctor_dashboard"))
 
     data = request.form # Or request.json
     errors = validate_consent_data(data)
     if errors:
+        if wants_json_response():
+            return jsonify({"errors": errors}), 400
         for error in errors:
             flash(error, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
@@ -3574,19 +4157,23 @@ def add_consent(record_id):
         }
 
         supabase.table("consents").insert(consent_data).execute()
-        flash("Consent record added successfully.", "success")
+        success_msg = "Consent record added successfully."
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "success")
         return redirect(url_for("view_health_record", record_id=record_id))
 
     except Exception as e:
         print(f"Error adding consent: {e}")
-        flash("Error processing consent. Please try again.", "danger")
+        error_msg = "Error processing consent. Please try again."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("view_health_record", record_id=record_id))
-
 
 # ============================================================
 # Routes - User Profile & Account Management
 # ============================================================
-
 
 @app.route('/user/profile/edit', methods=['GET', 'POST'])
 @login_required
@@ -3598,6 +4185,8 @@ def edit_profile():
     dashboard_redirect = f"{role}_dashboard" if role in ["user", "doctor", "admin"] else "login"
 
     if not user_id or role not in ["user", "doctor"]:
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
         flash("Access denied.", "danger")
         return redirect(url_for("login"))
 
@@ -3624,10 +4213,16 @@ def edit_profile():
                     "profile_picture_url": new_picture_url,
                     "profile_settings": updated_settings
                 }).eq("id", user_id).execute()
+                
+                if wants_json_response():
+                    return jsonify({"status": "success", "message": "User profile updated successfully!"}), 200
                 flash("User profile updated successfully!", "success")
             except Exception as e:
                 print(f"Error updating user profile: {e}")
-                flash("Failed to update profile. Please try again.", "danger")
+                error_msg = "Failed to update profile. Please try again."
+                if wants_json_response():
+                    return jsonify({"error": error_msg}), 500
+                flash(error_msg, "danger")
 
         elif role == "doctor":
             # --- Handle Doctor Profile Updates ---
@@ -3652,15 +4247,23 @@ def edit_profile():
                     "consultation_fee": consultation_fee,
                     "license_number": license_number,
                 }).eq("id", user_id).execute()
-                flash("Doctor profile updated successfully!", "success")
-
+                
                 # Check if profile is now complete and send welcome email if it was incomplete before
                 send_welcome_email_if_incomplete(user_id, session.get("user_email"), name, role)
 
+                if wants_json_response():
+                    return jsonify({"status": "success", "message": "Doctor profile updated successfully!"}), 200
+                flash("Doctor profile updated successfully!", "success")
+
             except Exception as e:
                 print(f"Error updating doctor profile: {e}")
-                flash("Failed to update profile. Please try again.", "danger")
+                error_msg = "Failed to update profile. Please try again."
+                if wants_json_response():
+                    return jsonify({"error": error_msg}), 500
+                flash(error_msg, "danger")
 
+        if wants_json_response():
+            return jsonify({"status": "success", "message": "Profile updated successfully!"}), 200
         return redirect(url_for(dashboard_redirect)) # Redirect back to the appropriate dashboard after update
 
     # --- GET Request (or after POST redirect) ---
@@ -3672,6 +4275,15 @@ def edit_profile():
             profile_settings = user_data.get("profile_settings", {})
             address_public = profile_settings.get("address_public", False)
             picture_public = profile_settings.get("picture_public", False)
+            
+            response_data = {
+                "user": user_data,
+                "address_public": address_public,
+                "picture_public": picture_public
+            }
+            
+            if wants_json_response():
+                return jsonify(response_data), 200
             return render_template('edit_profile.html',
                                    user=user_data,
                                    address_public=address_public,
@@ -3681,11 +4293,21 @@ def edit_profile():
             doctor_data = supabase.table("doctors").select("*").eq("id", user_id).single().execute().data
             # Combine user and doctor data for the template context
             profile_info = {**user_data, **doctor_data}
+            
+            response_data = {
+                "doctor": profile_info
+            }
+            
+            if wants_json_response():
+                return jsonify(response_data), 200
             return render_template('edit_doctor_profile.html', doctor=profile_info)
 
     except Exception as e:
         print(f"Error fetching profile for edit: {e}")
-        flash("Error loading profile data.", "danger")
+        error_msg = "Error loading profile data."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for(dashboard_redirect))
 
 @app.route('/user/account/delete', methods=['POST'])
@@ -3693,8 +4315,10 @@ def edit_profile():
 def delete_account():
     user_id = session.get("user_id")
     if not user_id or session.get("role") != "user":
-         flash("Access denied.", "danger")
-         return redirect(url_for("user_dashboard"))
+        if wants_json_response():
+            return jsonify({"error": "Access denied."}), 403
+        flash("Access denied.", "danger")
+        return redirect(url_for("user_dashboard"))
 
     # IMPORTANT: Handle related data first!
     # This is a critical step. You must delete or anonymize all data associated with this user.
@@ -3729,13 +4353,19 @@ def delete_account():
 
         # Clear session
         session.clear()
-        flash("Your account has been permanently deleted.", "info")
+        
+        success_msg = "Your account has been permanently deleted."
+        if wants_json_response():
+            return jsonify({"status": "success", "message": success_msg}), 200
+        flash(success_msg, "info")
         return redirect(url_for("index")) # Or a goodbye page
     except Exception as e:
         print(f"Error deleting account or related data: {e}")
-        flash("Failed to delete account due to an error. Please contact support.", "danger")
+        error_msg = "Failed to delete account due to an error. Please contact support."
+        if wants_json_response():
+            return jsonify({"error": error_msg}), 500
+        flash(error_msg, "danger")
         return redirect(url_for("edit_profile")) # Or back to settings - maybe don't clear session here on error
-
 # ============================================================
 # Routes - Utility
 # ============================================================
