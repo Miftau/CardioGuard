@@ -71,14 +71,14 @@
                    <!-- Manage Appointment Actions -->
                   {% if a.status == 'pending' %}
                     <div class="flex space-x-2">
-                      <a href="{{ url_for('reschedule_appointment', appointment_id=appt.id) }}" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Reschedule</a>
-                      <form method="POST" action="{{ url_for('cancel_appointment', appointment_id=appt.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to cancel this appointment?');">
+                      <a href="{{ url_for('reschedule_appointment', appointment_id=a.id) }}" class="text-blue-500 hover:text-blue-700 font-medium text-sm">Reschedule</a>
+                      <form method="POST" action="{{ url_for('cancel_appointment', appointment_id=a.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to cancel this appointment?');">
                         <button type="submit" class="text-red-500 hover:text-red-700 font-medium text-sm">Cancel</button>
                       </form>
                     </div>
                   {% elif a.status == 'confirmed' %}
                     <!--  Chat Link for Confirmed Appointments (points to new route) -->
-                    <a href="{{ url_for('appointment_chat', appointment_id=appt.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
+                    <a href="{{ url_for('appointment_chat', appointment_id=a.id) }}" class="text-indigo-500 hover:text-indigo-700 font-medium text-sm">Chat</a>
                   {% else %}
                     <span class="text-gray-400 text-sm">{{ a.status | title }}</span>
                   {% endif %}
