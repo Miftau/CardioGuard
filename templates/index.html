@@ -264,11 +264,11 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="flex flex-wrap justify-center items-center gap-8 md:gap-12">
       {% for logo in ['Paystack', 'Mastercard', 'PayPal', 'American Express', 'Stripe'] %}
         <img
-          src="{% if logo == 'Paystack' %} https://res.cloudinary.com/ddk5wx5ea/image/upload/v1712785419/paystack-icon-2048x2048-whitelogo_qe1zgz.webp    
-              {% elif logo == 'Mastercard' %}https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/240px-Mastercard-logo.svg.png    
-              {% elif logo == 'PayPal' %}https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/240px-PayPal.svg.png    
-              {% elif logo == 'American Express' %}https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/American_Express_logo_%282018%29.svg/240px-American_Express_logo_%282018%29.svg.png
-              {% elif logo == 'Stripe' %}https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Stripe_Logo%2C_revised_2016.svg/240px-Stripe_Logo%2C_revised_2016.svg.png    
+          src="{% if logo == 'Paystack' %}https://upload.wikimedia.org/wikipedia/commons/1/1f/Paystack.png
+              {% elif logo == 'Mastercard' %}https://upload.wikimedia.org/wikipedia/commons/b/b7/MasterCard_Logo.svg   
+              {% elif logo == 'PayPal' %}https://commons.wikimedia.org/wiki/File:PayPal_Logo2014.svg
+              {% elif logo == 'American Express' %}https://1000logos.net/wp-content/uploads/2016/10/American-Express-logo.png
+              {% elif logo == 'Stripe' %}https://logos-world.net/wp-content/uploads/2022/12/Stripe-Logo.png    
               {% endif %}"
           alt="{{ logo }}"
           class="h-10 w-auto grayscale hover:grayscale-0 transition-all duration-500 transform hover:scale-125"
